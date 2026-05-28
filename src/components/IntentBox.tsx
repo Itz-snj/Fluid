@@ -1,0 +1,173 @@
+"use client";
+
+import { useState } from "react";
+import type { FluidIR } from "@/fluid/core";
+import { FluidView, type DataContext } from "@/fluid/react";
+
+interface IntentBoxProps {
+  data: DataContext;
+}
+
+interface GenerateResponse {
+  ir?: FluidIR;
+  cached?: boolean;
+  usage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens: number;
+    cacheCreationTokens: number;
+  } | null;
+  latencyMs?: number;
+  error?: string;
+  detail?: string;
+}
+
+const SUGGESTIONS = [
+  "I'm a designer juggling client briefs — show me task cards grouped by client with creative-brief snippets pinned alongside.",
+  "I run support — show overdue tasks first as a tight checklist with assignees, hide everything that's done.",
+  "I'm an exec — just give me a 4-tile summary of work in flight, then a single timeline of what's due this week.",
+];
+
+export function IntentBox({ data }: IntentBoxProps) {
+  const [intent, setIntent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<GenerateResponse | null>(null);
+  const [showIR, setShowIR] = useState(false);
+
+  async function generate(text: string) {
+    if (!text.trim() || loading) return;
+    setLoading(true);
+    setResult(null);
+    try {
+      const resp = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ intent: text }),
+      });
+      const body = (await resp.json()) as GenerateResponse;
+      setResult(body);
+    } catch (err) {
+      setResult({ error: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-6">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          generate(intent);
+        }}
+        className="flex flex-col gap-3"
+      >
+        <label className="text-xs uppercase tracking-wider text-zinc-400">
+          Describe how you want to use this app
+        </label>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={intent}
+            onChange={(e) => setIntent(e.target.value)}
+            placeholder="e.g. I'm a designer — show me tasks grouped by client with brief snippets…"
+            className="flex-1 rounded-lg bg-zinc-900 border border-zinc-800 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-600"
+            disabled={loading}
+            maxLength={2000}
+          />
+          <button
+            type="submit"
+            disabled={loading || !intent.trim()}
+            className="rounded-lg bg-zinc-100 text-zinc-900 px-4 py-2 text-sm font-medium hover:bg-white disabled:bg-zinc-800 disabled:text-zinc-500 transition"
+          >
+            {loading ? "Generating…" : "Generate UI"}
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setIntent(s);
+                generate(s);
+              }}
+              disabled={loading}
+              className="text-xs text-zinc-400 hover:text-zinc-200 underline underline-offset-2 decoration-zinc-700 hover:decoration-zinc-400 transition"
+            >
+              Try: {s.split(" — ")[0]}
+            </button>
+          ))}
+        </div>
+      </form>
+
+      {loading && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-6 text-sm text-zinc-400">
+          <div className="flex items-center gap-3">
+            <div className="h-2 w-2 rounded-full bg-zinc-500 animate-pulse" />
+            Calling Claude · building IR · validating…
+          </div>
+        </div>
+      )}
+
+      {result?.error && (
+        <div className="rounded-lg border border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-200">
+          <div className="font-medium mb-1">{result.error}</div>
+          {result.detail && (
+            <pre className="text-xs opacity-80 whitespace-pre-wrap mt-2">{result.detail}</pre>
+          )}
+        </div>
+      )}
+
+      {result?.ir && (
+        <>
+          <div className="flex items-center justify-between text-xs text-zinc-500">
+            <div>
+              {result.cached ? (
+                <span className="text-emerald-400">cache hit</span>
+              ) : (
+                <>
+                  generated in <span className="tabular-nums">{result.latencyMs}ms</span>
+                  {result.usage && (
+                    <>
+                      {" · "}
+                      <span className="tabular-nums">{result.usage.inputTokens}</span>
+                      {" in / "}
+                      <span className="tabular-nums">{result.usage.outputTokens}</span>
+                      {" out"}
+                      {result.usage.cacheReadTokens > 0 && (
+                        <>
+                          {" · "}
+                          <span className="text-emerald-400 tabular-nums">
+                            {result.usage.cacheReadTokens} cached
+                          </span>
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowIR((v) => !v)}
+              className="hover:text-zinc-200"
+            >
+              {showIR ? "hide" : "show"} IR
+            </button>
+          </div>
+
+          {showIR && (
+            <pre className="rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-xs text-zinc-300 overflow-auto max-h-96">
+              {JSON.stringify(result.ir, null, 2)}
+            </pre>
+          )}
+
+          <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-6">
+            <FluidView ir={result.ir} data={data} />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

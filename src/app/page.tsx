@@ -2,6 +2,7 @@ import Link from "next/link";
 import { archetypes, getArchetype } from "@/archetypes";
 import { taskSchema } from "@/schemas/tasks.fluid";
 import { FluidView, type DataContext } from "@/fluid/react";
+import { IntentBox } from "@/components/IntentBox";
 
 interface PageProps {
   searchParams: Promise<{ as?: string }>;
@@ -58,10 +59,20 @@ export default async function HomePage({ searchParams }: PageProps) {
         <FluidView ir={archetype.ir} data={data} />
       </section>
 
+      <section className="max-w-7xl mx-auto px-6 py-8 border-t border-zinc-900">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold tracking-tight">Generate from intent</h2>
+          <p className="text-xs text-zinc-500 mt-1">
+            Or describe your own workflow and Claude will generate a fresh UI from the same schema and data.
+          </p>
+        </div>
+        <IntentBox data={data} />
+      </section>
+
       <footer className="max-w-7xl mx-auto px-6 py-10 text-xs text-zinc-600">
         Schema: <code className="text-zinc-400">{taskSchema.name}.fluid.ts</code> ·
         IR archetype: <code className="text-zinc-400">{archetype.id}</code> ·
-        Phase 1 — hardcoded IR, no LLM yet
+        Phase 2 — Claude Opus 4.7 generates IRs from intent
       </footer>
     </main>
   );
