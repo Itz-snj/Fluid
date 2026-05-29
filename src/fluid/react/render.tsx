@@ -63,6 +63,12 @@ export function renderNode(node: IRNode, ctx: DataContext, row?: Record<string, 
   }
 }
 
+function rowKey(r: Record<string, unknown>, i: number): string {
+  const id = r.id;
+  if (typeof id === "string" || typeof id === "number") return String(id);
+  return `row-${i}`;
+}
+
 function renderStack(node: StackNode, ctx: DataContext, row?: Record<string, unknown>) {
   const dir = node.direction === "row" ? "flex-row" : "flex-col";
   const gap = gapMap[node.gap ?? "md"];
@@ -190,8 +196,8 @@ function renderList(node: ListNode, ctx: DataContext) {
           <div key={key}>
             <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">{key}</div>
             <div className={`flex flex-col ${node.variant === "compact" ? "gap-1" : "gap-2"}`}>
-              {items.map((r) => (
-                <div key={String(r.id)}>{renderNode(node.item, ctx, r)}</div>
+              {items.map((r, i) => (
+                <div key={rowKey(r, i)}>{renderNode(node.item, ctx, r)}</div>
               ))}
             </div>
           </div>
@@ -201,8 +207,8 @@ function renderList(node: ListNode, ctx: DataContext) {
   }
   return (
     <div className={`flex flex-col ${node.variant === "compact" ? "gap-1" : "gap-2"} ${node.className ?? ""}`}>
-      {data.map((r) => (
-        <div key={String(r.id)}>{renderNode(node.item, ctx, r)}</div>
+      {data.map((r, i) => (
+        <div key={rowKey(r, i)}>{renderNode(node.item, ctx, r)}</div>
       ))}
     </div>
   );
@@ -221,8 +227,8 @@ function renderKanban(node: KanbanNode, ctx: DataContext) {
             <span className="text-xs tabular-nums text-zinc-500">{(groups[col] ?? []).length}</span>
           </div>
           <div className="flex flex-col gap-2">
-            {(groups[col] ?? []).map((r) => (
-              <div key={String(r.id)}>{renderCard(node.card, r)}</div>
+            {(groups[col] ?? []).map((r, i) => (
+              <div key={rowKey(r, i)}>{renderCard(node.card, r)}</div>
             ))}
           </div>
         </div>

@@ -19,23 +19,38 @@ export function runQuery<T extends Record<string, unknown>>(
         case "in":
           return Array.isArray(value) && value.includes(v as string);
         case "gte":
-          return (v as number) >= (value as number);
+          return compare(v, value) >= 0;
         case "lte":
-          return (v as number) <= (value as number);
+          return compare(v, value) <= 0;
       }
     });
   }
   if (query.sortBy) {
     const sortBy = query.sortBy;
-    out.sort((a, b) => {
-      const av = a[sortBy];
-      const bv = b[sortBy];
-      if (av === bv) return 0;
-      return (av as number | string) > (bv as number | string) ? 1 : -1;
-    });
+    out.sort((a, b) => compare(a[sortBy], b[sortBy]));
   }
   if (query.limit) out = out.slice(0, query.limit);
   return out;
+}
+
+function compare(a: unknown, b: unknown): number {
+  if (a === b) return 0;
+  if (a == null) return b == null ? 0 : -1;
+  if (b == null) return 1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "boolean" && typeof b === "boolean") {
+    return (a ? 1 : 0) - (b ? 1 : 0);
+  }
+  const as = String(a);
+  const bs = String(b);
+  if (isDateLike(as) && isDateLike(bs)) {
+    return Date.parse(as) - Date.parse(bs);
+  }
+  return as < bs ? -1 : as > bs ? 1 : 0;
+}
+
+function isDateLike(s: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}/.test(s);
 }
 
 export function groupRows<T extends Record<string, unknown>>(
@@ -81,6 +96,7 @@ function formatValue(raw: unknown, format?: Binding["format"]): string {
 function relativeDate(iso: string): string {
   const now = new Date("2026-05-29");
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
   const days = Math.round((d.getTime() - now.getTime()) / 86_400_000);
   if (days === 0) return "today";
   if (days === 1) return "tomorrow";

@@ -18,6 +18,7 @@ interface GenerateResponse {
     cacheCreationTokens: number;
   } | null;
   latencyMs?: number;
+  attempts?: number;
   error?: string;
   detail?: string;
 }
@@ -140,6 +141,14 @@ export function IntentBox({ data }: IntentBoxProps) {
                           {" · "}
                           <span className="text-emerald-400 tabular-nums">
                             {result.usage.cacheReadTokens} cached
+                          </span>
+                        </>
+                      )}
+                      {result.attempts && result.attempts > 1 && (
+                        <>
+                          {" · "}
+                          <span className="text-amber-400 tabular-nums">
+                            {result.attempts} attempts
                           </span>
                         </>
                       )}

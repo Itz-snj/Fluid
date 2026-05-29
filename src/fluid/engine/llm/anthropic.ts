@@ -24,20 +24,23 @@ export class AnthropicProvider implements LLMProvider {
   }
 
   async generate(opts: GenerateOptions): Promise<GenerateResult> {
-    const stream = this.client.messages.stream({
-      model: MODEL,
-      max_tokens: opts.maxTokens ?? 16000,
-      thinking: { type: "adaptive" },
-      output_config: { effort: opts.effort ?? "xhigh" },
-      system: [
-        {
-          type: "text",
-          text: opts.systemPrompt,
-          cache_control: { type: "ephemeral" },
-        },
-      ],
-      messages: [{ role: "user", content: opts.userMessage }],
-    });
+    const stream = this.client.messages.stream(
+      {
+        model: MODEL,
+        max_tokens: opts.maxTokens ?? 16000,
+        thinking: { type: "adaptive" },
+        output_config: { effort: opts.effort ?? "xhigh" },
+        system: [
+          {
+            type: "text",
+            text: opts.systemPrompt,
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [{ role: "user", content: opts.userMessage }],
+      },
+      opts.signal ? { signal: opts.signal } : undefined,
+    );
 
     try {
       const message = await stream.finalMessage();

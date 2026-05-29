@@ -12,6 +12,8 @@ export interface GenerateOptions {
   maxTokens?: number;
   /** Free-form provider hint; Anthropic uses adaptive + effort, others ignore. */
   effort?: "low" | "medium" | "high" | "max" | "xhigh";
+  /** Aborts the in-flight request (server timeout, client disconnect). */
+  signal?: AbortSignal;
 }
 
 export interface GenerateResult {

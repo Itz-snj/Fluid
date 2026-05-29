@@ -1,16 +1,24 @@
-import { type FluidIR, validateIR } from "@/fluid/core";
+import {
+  type FluidIR,
+  type FluidSchema,
+  checkIRAgainstSchema,
+  validateIR,
+} from "@/fluid/core";
 import { type DataContext } from "./data";
 import { renderNode } from "./render";
 
 interface FluidViewProps {
   ir: unknown;
   data: DataContext;
+  /** Optional. When provided, IR is semantically checked against the schema. */
+  schema?: FluidSchema;
 }
 
-export function FluidView({ ir, data }: FluidViewProps) {
+export function FluidView({ ir, data, schema }: FluidViewProps) {
   let validated: FluidIR;
   try {
     validated = validateIR(ir);
+    if (schema) checkIRAgainstSchema(validated, schema);
   } catch (err) {
     return (
       <div className="rounded-lg border border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-200">

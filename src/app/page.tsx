@@ -14,7 +14,7 @@ export default async function HomePage({ searchParams }: PageProps) {
 
   const data: DataContext = {};
   for (const ep of Object.values(taskSchema.endpoints)) {
-    data[ep.entity] = await ep.fetch();
+    data[ep.entity] = ep.fetch();
   }
 
   return (
@@ -34,11 +34,10 @@ export default async function HomePage({ searchParams }: PageProps) {
                 <Link
                   key={a.id}
                   href={`/?as=${a.id}`}
-                  className={`px-3 py-1.5 text-sm rounded-md transition ${
-                    active
+                  className={`px-3 py-1.5 text-sm rounded-md transition ${active
                       ? "bg-zinc-100 text-zinc-900 font-medium"
                       : "text-zinc-300 hover:text-zinc-100 hover:bg-zinc-800"
-                  }`}
+                    }`}
                 >
                   <span className="mr-1.5">{a.emoji}</span>
                   {a.label}
@@ -56,7 +55,7 @@ export default async function HomePage({ searchParams }: PageProps) {
       </header>
 
       <section className="max-w-7xl mx-auto px-6 py-8">
-        <FluidView ir={archetype.ir} data={data} />
+        <FluidView ir={archetype.ir} data={data} schema={taskSchema} />
       </section>
 
       <section className="max-w-7xl mx-auto px-6 py-8 border-t border-zinc-900">
