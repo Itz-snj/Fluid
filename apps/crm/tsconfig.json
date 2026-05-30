@@ -1,0 +1,27 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@fluid/core": ["../../packages/fluid-core/src"],
+      "@fluid/engine": ["../../packages/fluid-engine/src"],
+      "@fluid/react": ["../../packages/fluid-react/src"],
+      "@fluid/db": ["../../packages/fluid-db/src"],
+      "@fluid/telemetry": ["../../packages/fluid-telemetry/src"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
