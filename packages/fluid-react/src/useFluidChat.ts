@@ -31,6 +31,8 @@ export interface UseFluidChatOptions {
   userId: string;
   schemaName: string;
   currentSnapshotId?: string;
+  /** The IR currently displayed — sent to the server so it knows what to patch. */
+  currentIR?: FluidIR;
   onIRChange: (newIR: FluidIR, snapshotId: string, version: number) => void;
 }
 
@@ -47,7 +49,9 @@ export interface UseFluidChatReturn {
 }
 
 export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
-  const { userId, schemaName, currentSnapshotId, onIRChange } = opts;
+  const { userId, schemaName, currentSnapshotId, currentIR, onIRChange } = opts;
+  const currentIRRef = useRef(currentIR);
+  currentIRRef.current = currentIR;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [isPatching, setIsPatching] = useState(false);
@@ -117,6 +121,7 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
           body: JSON.stringify({
             message: text,
             currentSnapshotId,
+            currentIR: currentIRRef.current,
             userId,
             schemaName,
           }),

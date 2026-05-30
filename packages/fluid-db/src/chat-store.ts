@@ -1,6 +1,6 @@
 import { eq, and, desc } from "drizzle-orm";
 import type { FluidDb } from "./connection";
-import { chatMessages } from "./schema";
+import { chatMessages, userProfiles } from "./schema";
 
 export interface ChatMessage {
   id: number;
@@ -27,6 +27,12 @@ export async function appendMessage(
     wasApplied?: boolean;
   },
 ): Promise<ChatMessage> {
+  // Ensure user profile row exists before inserting (FK constraint).
+  await db
+    .insert(userProfiles)
+    .values({ userId: msg.userId })
+    .onConflictDoNothing({ target: userProfiles.userId });
+
   const [row] = await db
     .insert(chatMessages)
     .values({

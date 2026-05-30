@@ -81,9 +81,19 @@ export function FluidView({ ir, data, schema }: FluidViewProps) {
 
   if (error) {
     return (
-      <div className="rounded-lg border border-rose-800 bg-rose-950/40 p-4 text-sm text-rose-200">
-        <div className="font-medium mb-1">Invalid IR</div>
-        <pre className="text-xs opacity-80 whitespace-pre-wrap">{error}</pre>
+      <div
+        className="rounded-2xl p-5 text-sm"
+        style={{
+          background: "rgba(244, 63, 94, 0.05)",
+          border: "1px solid rgba(244, 63, 94, 0.15)",
+          backdropFilter: "blur(12px)",
+        }}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-2 w-2 rounded-full bg-rose-500" style={{ boxShadow: "0 0 8px rgba(244, 63, 94, 0.4)" }} />
+          <span className="font-semibold text-rose-300">Invalid IR</span>
+        </div>
+        <pre className="text-xs text-rose-200/70 whitespace-pre-wrap leading-relaxed">{error}</pre>
       </div>
     );
   }

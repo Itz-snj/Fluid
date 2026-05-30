@@ -56,7 +56,77 @@ interface PatchIRDeps {
   provider: LLMProvider;
 }
 
-const MAX_RETRIES = 1;
+const MAX_RETRIES = 2;
+
+/**
+ * Try simple programmatic patches before hitting the LLM.
+ * Handles: kanban column reorder requests.
+ */
+function tryProgrammaticPatch(ir: FluidIR, message: string): FluidIR | null {
+  const msg = message.toLowerCase();
+
+  // Detect "X over/before Y" or "move X to top" for kanban columns
+  const root = ir.root as Record<string, unknown>;
+
+  // Find kanban node (direct root or in a stack)
+  const findKanban = (node: unknown): Record<string, unknown> | null => {
+    if (!node || typeof node !== "object") return null;
+    const n = node as Record<string, unknown>;
+    if (n.type === "kanban") return n;
+    if (Array.isArray(n.children)) {
+      for (const c of n.children) { const r = findKanban(c); if (r) return r; }
+    }
+    return null;
+  };
+
+  const kanban = findKanban(root);
+  if (!kanban || !Array.isArray(kanban.columns)) return null;
+
+  const cols: string[] = kanban.columns as string[];
+
+  // Pattern: "[colA] over [colB]" or "put [colA] before [colB]"
+  for (const colA of cols) {
+    for (const colB of cols) {
+      if (colA === colB) continue;
+      const aName = colA.replace(/_/g, " ").toLowerCase();
+      const bName = colB.replace(/_/g, " ").toLowerCase();
+      if (
+        (msg.includes(aName) && msg.includes(bName)) &&
+        (msg.includes("over") || msg.includes("before") || msg.includes("above"))
+      ) {
+        // Move colA before colB
+        const newCols = cols.filter((c) => c !== colA);
+        const bIdx = newCols.indexOf(colB);
+        newCols.splice(bIdx, 0, colA);
+        return JSON.parse(JSON.stringify({
+          ...ir,
+          root: patchNodeKanbanCols(root, colA, newCols),
+        })) as FluidIR;
+      }
+    }
+  }
+
+  return null;
+}
+
+function patchNodeKanbanCols(
+  node: Record<string, unknown>,
+  _colA: string,
+  newCols: string[],
+): Record<string, unknown> {
+  if (node.type === "kanban") {
+    return { ...node, columns: newCols };
+  }
+  if (Array.isArray(node.children)) {
+    return {
+      ...node,
+      children: (node.children as Record<string, unknown>[]).map((c) =>
+        patchNodeKanbanCols(c, _colA, newCols)
+      ),
+    };
+  }
+  return node;
+}
 
 /**
  * Patch an existing IR based on a conversational change request.
@@ -66,6 +136,21 @@ export async function patchIR(
   deps: PatchIRDeps,
 ): Promise<PatchIRResult> {
   const { provider } = deps;
+
+  // ── Fast path: try programmatic patch first ──────────────────
+  try {
+    const programmatic = tryProgrammaticPatch(opts.currentIR, opts.message);
+    if (programmatic) {
+      validateIR(programmatic);
+      checkIRAgainstSchema(programmatic, opts.schema);
+      return {
+        canApply: true,
+        newIR: programmatic,
+        explanation: `Done! Applied your change: "${opts.message}"`,
+        usage: null,
+      };
+    }
+  } catch { /* fall through to LLM */ }
 
   // Append the user's current message to the chat history for context.
   const chatHistory: PatchChatMessage[] = [
@@ -97,6 +182,8 @@ export async function patchIR(
       signal: opts.signal,
     });
     usage = result.usage;
+    // Strip <think>...</think> tags that some models emit
+    result.text = result.text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 
     try {
       const parsed = parseResponse(result.text);

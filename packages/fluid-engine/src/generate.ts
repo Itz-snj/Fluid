@@ -39,7 +39,7 @@ interface GenerateIRDeps {
   cache: CacheAdapter;
 }
 
-const MAX_RETRIES = 1;
+const MAX_RETRIES = 2;
 
 /**
  * Schema + intent → validated IR.

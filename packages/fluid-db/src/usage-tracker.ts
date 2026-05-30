@@ -1,7 +1,7 @@
 import { eq, and, gte, sql, inArray } from "drizzle-orm";
 import type { UsageEvent, UsageSummary, UsageTracker } from "@fluid/engine";
 import type { FluidDb } from "./connection";
-import { usageEvents } from "./schema";
+import { usageEvents, userProfiles } from "./schema";
 
 /** Minimum event count before a summary is considered meaningful. */
 const MIN_EVENTS_FOR_SUMMARY = 10;
@@ -21,6 +21,14 @@ export function createPgUsageTracker(db: FluidDb): UsageTracker {
   return {
     async recordBatch(events: UsageEvent[]): Promise<void> {
       if (events.length === 0) return;
+
+      // Ensure all user profile rows exist (FK constraint on usage_events.user_id)
+      const uniqueUserIds = [...new Set(events.map((e) => e.userId))];
+      await db
+        .insert(userProfiles)
+        .values(uniqueUserIds.map((userId) => ({ userId })))
+        .onConflictDoNothing();
+
       await db.insert(usageEvents).values(
         events.map((e) => ({
           userId: e.userId,

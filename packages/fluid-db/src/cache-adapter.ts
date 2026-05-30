@@ -2,7 +2,7 @@ import { eq, and, gt } from "drizzle-orm";
 import type { CacheAdapter } from "@fluid/engine";
 import type { FluidIR } from "@fluid/core";
 import type { FluidDb } from "./connection";
-import { generatedIrs } from "./schema";
+import { generatedIrs, userProfiles } from "./schema";
 
 /**
  * PostgreSQL-backed CacheAdapter.
@@ -65,10 +65,19 @@ export function createPgCacheAdapter(
           ? (ir as Record<string, unknown>).archetype as string
           : null;
 
+      const userId = meta?.userId ?? "anon";
+
+      // Ensure the user profile row exists before inserting the IR (FK constraint).
+      // This is a no-op if the profile already exists.
+      await db
+        .insert(userProfiles)
+        .values({ userId })
+        .onConflictDoNothing({ target: userProfiles.userId });
+
       await db
         .insert(generatedIrs)
         .values({
-          userId: meta?.userId ?? "anon",
+          userId,
           schemaName: meta?.schemaName ?? "unknown",
           cacheKey: key,
           irJson: ir as Record<string, unknown>,

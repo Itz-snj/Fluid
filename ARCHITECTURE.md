@@ -2,55 +2,64 @@
 
 Detailed system architecture, flow diagrams, and operational guide.
 
-> **Status:** Phase 1 + Phase 2 complete and hardened. Workspace split into three packages (`@fluid/core`, `@fluid/engine`, `@fluid/react`) plus an in-tree showcase app at `apps/engine`. The learn loop (`engine.refine` + `ProfileStore`) is wired with an in-memory default — swap for Redis/Postgres in prod. Phase 3 (separate consumer demo app) is queued.
+> **Status:** Phase 1 + Phase 2 + Phase 3 complete. Workspace has five packages (`@fluid/core`, `@fluid/engine`, `@fluid/react`, `@fluid/db`, `@fluid/telemetry`) plus two apps (`apps/engine` showcase, `crm` demo consumer). The chatbot (conversational IR patching), telemetry-driven suggestions, snapshot versioning, Gemini provider, and DB-backed adapters are all wired.
 
 ---
 
 ## Workspace layout
 
 ```
-genUI/
+genUIBackend/
 ├── packages/
-│   ├── fluid-core/      → @fluid/core   IR + Schema + semantic validation
-│   ├── fluid-engine/    → @fluid/engine LLM bridge + adapters + createEngine()
-│   └── fluid-react/     → @fluid/react  FluidView + fetchIR + useFluidIR
-└── apps/
-    └── engine/          → @fluid-app/engine  Next.js 16 showcase app
+│   ├── fluid-core/        → @fluid/core       IR + Schema + semantic validation
+│   ├── fluid-engine/      → @fluid/engine     LLM bridge + adapters + createEngine()
+│   ├── fluid-react/       → @fluid/react      FluidView + FluidChat + hooks
+│   ├── fluid-db/          → @fluid/db         Drizzle schema + Postgres adapters
+│   └── fluid-telemetry/   → @fluid/telemetry  Context enricher + refresh policy
+├── apps/
+│   └── engine/            → @fluid-app/engine  Next.js 16 showcase app
+└── crm/                   → @fluid-app/crm     CRM demo consumer (10 entities)
 ```
 
 - **`@fluid/core`** has no runtime dependencies beyond Zod. It defines what IR is and what makes a valid schema. The LLM never sees this code; it's the spec the LLM is held to.
-- **`@fluid/engine`** is BYOK (Bring Your Own Key). It owns prompt construction, the LLM call, the IR cache, the rate limiter, and the retry-with-feedback loop. It does **not** own a database. All persistence is plugged in via adapter interfaces.
-- **`@fluid/react`** is rendering only. Server-safe `FluidView` plus client-side `fetchIR` + `useFluidIR` so consumers don't hand-roll the fetch.
-- **`apps/engine`** wires the three packages into a working Next 16 app — server route, intent box, archetype switcher, smoke script. It's both the demo and a reference integration.
+- **`@fluid/engine`** is BYOK (Bring Your Own Key). It owns prompt construction, the LLM call (Anthropic or Gemini), the IR cache, the rate limiter, the retry-with-feedback loop, and conversational patching (`engine.patch`). All persistence is plugged in via adapter interfaces.
+- **`@fluid/react`** has rendering + interactive components. Server-safe `FluidView`, client-side `FluidChat` (chatbot widget), `useFluidChat` (chat state + suggestions + history), `useFluidTelemetry` (usage event tracking), and `useMutations` (action dispatch).
+- **`@fluid/db`** provides Drizzle ORM schema and Postgres-backed implementations of all adapters: `createPgCacheAdapter`, `createPgProfileStore`, `createPgUsageTracker`, plus chat messages, snapshots, and suggestions tables.
+- **`@fluid/telemetry`** provides `createContextEnricher()` (role/device/permissions → prompt hints) and `createRefreshPolicy()` (should-we-regenerate logic).
+- **`apps/engine`** wires the packages into a working Next 16 app — server route, intent box, archetype switcher, smoke script. It's both the demo and a reference integration.
+- **`crm/`** is a 10-entity CRM consumer app demonstrating Fluid in a real-world scenario — with chatbot, role switching, telemetry, and live AI-generated UIs.
 
 ---
 
 ## Distribution & cost model — BYOK + adapters
 
-Fluid is a library, not a hosted service. The consumer's Next.js (or Node) process runs the engine in its own server runtime. The consumer pays Anthropic directly; nothing flows through Fluid-owned infrastructure.
+Fluid is a library, not a hosted service. The consumer's Next.js (or Node) process runs the engine in its own server runtime. The consumer pays the LLM provider directly; nothing flows through Fluid-owned infrastructure.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                Consumer's Next.js process                       │
 │                                                                  │
 │   getEngine()                                                   │
-│     └── createEngine({ apiKey, cache?, rateLimiter? })          │
-│           ├── @fluid/engine (this package)                      │
-│           ├── consumer's CacheAdapter (or default in-memory)    │
-│           └── consumer's RateLimiter  (or default in-memory)    │
+│     └── createEngine({ provider?, apiKey?, cache?, ... })       │
+│           ├── @fluid/engine (orchestration)                     │
+│           ├── LLMProvider (Anthropic or Gemini)                 │
+│           ├── CacheAdapter (in-memory or Pg via @fluid/db)     │
+│           ├── ProfileStore (in-memory or Pg)                    │
+│           └── UsageTracker (noop or Pg)                         │
 │                                                                  │
 │   /api/generate  ──▶  engine.generate({ schema, intent })       │
+│   /api/chat      ──▶  engine.patch({ schema, currentIR, msg })  │
 │                          │                                       │
 │                          ▼                                       │
-│                  Anthropic (consumer's API key)                 │
+│                  LLM (Anthropic or Google Gemini)               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 **Why this matters:**
-- No env reads inside the library. `createEngine({ apiKey })` is explicit.
+- No env reads inside the library. `createEngine({ apiKey })` or `createEngine({ provider })` is explicit.
 - Default in-memory adapters work for dev/demos/single-instance prod with zero setup.
-- Swap `cache` for Redis/Upstash, or `rateLimiter` for a distributed one, by passing objects matching the published interfaces. No fork required.
-- A custom `provider: LLMProvider` slot exists for swapping Anthropic for OpenAI/Gemini/etc.
+- Swap adapters for Postgres via `@fluid/db` — `createPgCacheAdapter(db)`, `createPgProfileStore(db)`, `createPgUsageTracker(db)`.
+- **Multi-provider:** `createAnthropicProvider(key)` or `createGeminiProvider(key)`. Pass via `createEngine({ provider })`. Both implement the same `LLMProvider` interface.
 
 ---
 
@@ -205,25 +214,19 @@ HTML                             ← what's on the wire
        ▼
 ┌─────────────────────────────┐
 │   LLMProvider (injected)    │
-│   default: AnthropicProvider│
-│   (apiKey from createEngine)│
+│   AnthropicProvider  -or-   │
+│   GeminiProvider            │
 └──────┬──────────────────────┘
        │
        ▼
 ┌─────────────────────────────────────────────────┐
-│             anthropic.ts                         │
+│        anthropic.ts  OR  gemini.ts               │
 │                                                  │
-│  client.messages.stream({                       │
-│    model: "claude-opus-4-7",                    │
-│    max_tokens: 16000,                           │
-│    thinking: { type: "adaptive" },              │
-│    output_config: { effort: "xhigh" },          │
-│    system: [{                                   │
-│      text: systemPrompt,                        │
-│      cache_control: { type: "ephemeral" }      │
-│    }],                                          │
-│    messages: [{ role: "user", content: intent }]│
-│  }, { signal })  ← AbortSignal forwarded        │
+│  Anthropic: claude-opus-4-7, adaptive thinking  │
+│  Gemini:    gemini-2.5-flash-preview-05-20      │
+│                                                  │
+│  Both implement LLMProvider.generate()          │
+│  → system prompt + user message → text output   │
 └──────┬──────────────────────────────────────────┘
        │
        ▼
@@ -315,23 +318,36 @@ HTML                             ← what's on the wire
 | `src/ir.ts` | `@fluid/core` | IR type definitions + Zod schemas | No (defines validation) |
 | `src/schema.ts` | `@fluid/core` | `defineSchema()` runtime, entity/endpoint types | No |
 | `src/validate.ts` | `@fluid/core` | `checkIRAgainstSchema` (semantic sandbox) + IR limits (depth, node count) | No |
-| `src/adapters.ts` | `@fluid/engine` | `CacheAdapter` / `RateLimiter` interfaces | No |
-| `src/engine.ts` | `@fluid/engine` | `createEngine({ apiKey, cache?, rateLimiter?, profileStore?, provider? })` factory; exposes `generate()` (stateless) and `refine()` (learns from history) | No |
+| `src/adapters.ts` | `@fluid/engine` | `CacheAdapter` / `RateLimiter` / `ProfileStore` / `UsageTracker` / `ContextEnricher` / `RefreshPolicy` interfaces | No |
+| `src/engine.ts` | `@fluid/engine` | `createEngine(opts)` factory; exposes `generate()`, `refine()`, `patch()`, `checkRefresh()` | No |
 | `src/prompt.ts` | `@fluid/engine` | Build system prompt from schema | No (produces LLM input) |
-| `src/llm/provider.ts` | `@fluid/engine` | Provider-agnostic interface (with `AbortSignal`) | No |
-| `src/llm/anthropic.ts` | `@fluid/engine` | Anthropic SDK calls — streaming, prompt caching, abort. Constructor takes `apiKey` | Sends/receives |
-| `src/cache.ts` | `@fluid/engine` | `intentKey(schema, intent, userId?)` + `createMemoryCache()` (LRU + TTL + single-flight) | No |
-| `src/profile.ts` | `@fluid/engine` | `createMemoryProfileStore()` — per-user `IntentProfile` (bounded recency-ordered history) | No |
-| `src/rate-limit.ts` | `@fluid/engine` | `createMemoryRateLimiter()` — sliding-window in-memory limiter, no module-level state | No |
-| `src/generate.ts` | `@fluid/engine` | Orchestrate cache → LLM → parse → validate → retry. Pure function over injected `{ provider, cache }` | Receives + validates |
+| `src/patch.ts` | `@fluid/engine` | `patchIR()` — conversational IR modification via LLM | Sends/receives |
+| `src/patch-prompt.ts` | `@fluid/engine` | Build patch-specific system prompt (schema-aware diff instructions) | No |
+| `src/llm/provider.ts` | `@fluid/engine` | Provider-agnostic `LLMProvider` interface (with `AbortSignal`) | No |
+| `src/llm/anthropic.ts` | `@fluid/engine` | Anthropic SDK — Claude Opus 4.7, adaptive thinking, streaming, prompt caching | Sends/receives |
+| `src/llm/gemini.ts` | `@fluid/engine` | Google Gemini SDK — Gemini 2.5 Flash, `@google/generative-ai` | Sends/receives |
+| `src/cache.ts` | `@fluid/engine` | `intentKey()` + `createMemoryCache()` (LRU + TTL + single-flight) | No |
+| `src/profile.ts` | `@fluid/engine` | `createMemoryProfileStore()` — per-user `IntentProfile` | No |
+| `src/rate-limit.ts` | `@fluid/engine` | `createMemoryRateLimiter()` — sliding-window in-memory limiter | No |
+| `src/generate.ts` | `@fluid/engine` | Orchestrate cache → LLM → parse → validate → retry | Receives + validates |
+| `src/schema.ts` | `@fluid/db` | Drizzle ORM schema: `fluid_user_profiles`, `fluid_ir_cache`, `fluid_usage_events`, `fluid_snapshots`, `fluid_chat_messages`, `fluid_suggestions` | No |
+| `src/profile-store.ts` | `@fluid/db` | `createPgProfileStore(db)` — Postgres-backed profile store | No |
+| `src/cache-adapter.ts` | `@fluid/db` | `createPgCacheAdapter(db)` — Postgres-backed IR cache | No |
+| `src/usage-tracker.ts` | `@fluid/db` | `createPgUsageTracker(db)` — Postgres usage events + summarize | No |
+| `src/snapshots.ts` | `@fluid/db` | `createSnapshot()`, `getActiveSnapshot()`, `revertToSnapshot()` — IR version chain | No |
+| `src/messages.ts` | `@fluid/db` | `appendMessage()`, `getMessages()` — chat history persistence | No |
+| `src/suggestions.ts` | `@fluid/db` | `createSuggestion()`, `getPendingSuggestions()`, `resolveSuggestion()` | No |
+| `src/context.ts` | `@fluid/telemetry` | `createContextEnricher()` — role/device/permissions → prompt hints | No |
+| `src/refresh.ts` | `@fluid/telemetry` | `createRefreshPolicy()` — should-regenerate-IR logic based on usage patterns | No |
 | `src/data.ts` | `@fluid/react` | `runQuery`, `groupRows`, `resolveBinding` (type-aware compare) | No |
 | `src/render.tsx` | `@fluid/react` | Recursive IR → React | No (consumes validated IR) |
 | `src/FluidView.tsx` | `@fluid/react` | Public component: Zod + (optional) semantic validation before render | No (defensive validation) |
+| `src/FluidChat.tsx` | `@fluid/react` | Chat widget: floating bubble, message bubbles, suggestions, version history, revert | No |
+| `src/useFluidChat.ts` | `@fluid/react` | Chat hook: sendMessage, revert, accept/dismiss suggestions, polls suggestions | No |
+| `src/useFluidTelemetry.ts` | `@fluid/react` | Telemetry hook: batches IntersectionObserver events, posts to `/api/telemetry` | No |
+| `src/useMutations.ts` | `@fluid/react` | Mutation hook: dispatches mutation actions from generated UI buttons | No |
 | `src/fetchIR.ts` | `@fluid/react` | Typed fetch wrapper over the consumer's `/api/generate` | No |
-| `src/useFluidIR.ts` | `@fluid/react` | Client hook: re-fetches on intent/userId change, manages AbortController, exposes `refetch` | No |
-| `apps/engine/src/lib/engine.ts` | app | Lazy `getEngine()` singleton — reads `ANTHROPIC_API_KEY`, calls `createEngine` | No |
-| `apps/engine/src/app/api/generate/route.ts` | app | HTTP entrypoint: Zod body, rate limit via engine, abort, telemetry | No |
-| `apps/engine/src/archetypes/{lawyer,engineer,pm}.ir.ts` | app | Preset IRs — demo evidence + cold-start fallbacks + grammar fixtures | No |
+| `src/useFluidIR.ts` | `@fluid/react` | Client hook: re-fetches on intent/userId change, manages AbortController | No |
 
 ---
 
@@ -616,23 +632,40 @@ Total: <50ms
 
 ### Add a new LLM provider
 
-1. Implement `LLMProvider` (from `@fluid/engine`) in a new file
-2. Pass an instance via `createEngine({ provider })` — takes precedence over `apiKey`
+Two providers ship today: `AnthropicProvider` (Claude Opus 4.7) and `GeminiProvider` (Gemini 2.5 Flash).
 
-### Add a new schema
+1. Implement `LLMProvider` from `@fluid/engine` in `packages/fluid-engine/src/llm/{name}.ts`
+2. Export from `packages/fluid-engine/src/llm/index.ts`
+3. Pass an instance via `createEngine({ provider: createMyProvider(key) })`
+
+### Add a new schema (integrate Fluid into a new app)
 
 In the consumer app:
 
-1. Create `src/schemas/{name}.fluid.ts`
-2. Call `defineSchema({...})` from `@fluid/core`
-3. Hand the schema to `engine.generate({ schema, intent })`
+1. Create `src/schemas/{name}.fluid.ts` with `defineSchema()` from `@fluid/core`
+2. Create `src/lib/engine.ts` — lazy `getEngine()` singleton calling `createEngine({ provider, cache, ... })`
+3. Create API routes: `/api/generate` (intent → IR), `/api/chat` (patch IR), `/api/telemetry` (usage events)
+4. Render with `<FluidView ir={ir} data={data} schema={schema} />`
+5. Add `<FluidChat currentIR={ir} onIRChange={...} />` for chatbot
 
-### Swap cache backend (e.g. Redis)
+See `crm/` for a complete 10-entity example.
 
-1. Implement `CacheAdapter` from `@fluid/engine`
-2. Pass via `createEngine({ cache: myRedisAdapter })`
+### Swap to Postgres-backed adapters
 
-The default in-memory adapter is single-process and dies on restart — fine for dev/demo, fine for single-instance prod, not fine for horizontal scaling.
+Use `@fluid/db`:
+
+```ts
+import { createDbConnection, createPgCacheAdapter, createPgProfileStore, createPgUsageTracker } from "@fluid/db";
+const db = createDbConnection(process.env.DATABASE_URL!);
+createEngine({
+  provider: createGeminiProvider(key),
+  cache: createPgCacheAdapter(db),
+  profileStore: createPgProfileStore(db),
+  usageTracker: createPgUsageTracker(db),
+});
+```
+
+Run `drizzle-kit push` to create the tables. Schema is in `packages/fluid-db/src/schema.ts`.
 
 ### Swap rate limiter
 
@@ -678,17 +711,30 @@ In production, the *content* of these three files is demo-flavored. The *role* (
 
 ## Where the database lives
 
-**Fluid does not own a database.** That's intentional, and unchanged by the workspace split.
+**Fluid provides optional Postgres adapters via `@fluid/db`.** The consumer brings their own Postgres (Neon, Supabase, local). All tables are Fluid-namespaced (`fluid_*`) and don't collide with app tables.
 
-| What | Where it lives | Notes |
-|---|---|---|
-| App data (Task, Snippet) | Showcase: hardcoded arrays in `tasks.fluid.ts`. Real consumers: their own DB, exposed via `endpoint.fetch()` | `@fluid/core` never touches this |
-| Generated IRs | `CacheAdapter` — default in-memory, swap for Redis | Consumer picks |
-| Intent profiles per user | `ProfileStore` — default in-memory, swap for Postgres/Redis/Upstash | Consumer picks |
-| Rate-limit state | `RateLimiter` — default in-memory, swap for Redis | Consumer picks |
-| IR version history | Not stored. The IR for an `(intent, history)` pair is reproducible by calling refine again | Could add as a separate adapter later |
+| What | Where it lives | Package | Notes |
+|---|---|---|---|
+| App data (Tasks, Deals, etc.) | Consumer's own DB, exposed via `endpoint.fetch()` | `@fluid/core` | Fluid never touches this |
+| Generated IRs (cache) | `fluid_ir_cache` table or in-memory | `@fluid/db` | `createPgCacheAdapter(db)` |
+| Intent profiles per user | `fluid_user_profiles` table or in-memory | `@fluid/db` | `createPgProfileStore(db)` |
+| Usage telemetry events | `fluid_usage_events` table or noop | `@fluid/db` | `createPgUsageTracker(db)` |
+| IR snapshots (version chain) | `fluid_snapshots` table | `@fluid/db` | `createSnapshot()`, `revertToSnapshot()` |
+| Chat messages | `fluid_chat_messages` table | `@fluid/db` | `appendMessage()`, `getMessages()` |
+| AI suggestions | `fluid_suggestions` table | `@fluid/db` | `createSuggestion()`, `resolveSuggestion()` |
+| Rate-limit state | In-memory (process) | `@fluid/engine` | Swap for Redis if scaling horizontally |
 
-**Important distinction:** Fluid never owns the developer's application data. Tasks live in the developer's DB. Any Fluid-flavored persistence (IR cache, intent profiles) is a small metadata store the developer also owns, plugged in via adapter. The `endpoint.fetch()` pattern is the bridge for app data; `CacheAdapter` / `RateLimiter` / future `ProfileStore` are the bridges for engine state.
+### Database setup
+
+```bash
+# 1. Set DATABASE_URL in packages/fluid-db/.env or consumer's .env.local
+# 2. Push schema to Postgres
+cd packages/fluid-db && npx drizzle-kit push
+```
+
+All consumer apps (apps/engine, crm) share the same database and tables. The `userId` column namespaces data per user.
+
+**Important distinction:** Fluid never owns the developer's application data. CRM deals, tasks, contacts live in the developer's DB. Fluid's tables are metadata — cache, profiles, telemetry, chat, snapshots. The `endpoint.fetch()` pattern bridges app data; `@fluid/db` bridges engine state.
 
 ---
 
@@ -710,11 +756,62 @@ In production, the *content* of these three files is demo-flavored. The *role* (
 
 - **IR** — Intermediate Representation. Sandboxed JSON tree the LLM emits and the renderer consumes.
 - **Schema** — Developer-authored capability declaration (`.fluid.ts` file).
-- **Archetype** — A named preset IR (e.g., "lawyer", "engineer", "pm") used for demos and cold-start defaults.
+- **Archetype** — A named preset IR (e.g., "sales_rep", "sales_manager", "support_agent") used for demos and cold-start defaults.
 - **Intent** — Freeform string describing how a user wants to work.
-- **Engine** — The LLM bridge: prompt + provider + cache + validator. Constructed via `createEngine()`.
+- **Engine** — The LLM bridge: prompt + provider + cache + validator + patcher. Constructed via `createEngine()`.
+- **Patch** — Conversational IR modification. `engine.patch({ currentIR, message })` sends the current IR + a change request to the LLM, which returns a modified IR or rejects the request.
+- **Snapshot** — A versioned copy of an IR stored in `fluid_snapshots`. Each patch or generate creates a new snapshot. Supports revert.
+- **Suggestion** — A proactive UI improvement proposed by the system based on usage telemetry. Stored in `fluid_suggestions`, displayed in FluidChat.
 - **Renderer** — Recursive React component tree builder from IR.
-- **Adapter** — A pluggable backing store (`CacheAdapter`, `RateLimiter`) the consumer supplies to `createEngine`. Defaults are in-memory; production swaps for Redis/Upstash.
-- **BYOK** — Bring Your Own Key. The consumer's Anthropic key, passed explicitly to `createEngine({ apiKey })`. The library never reads env vars.
-- **IntentProfile** — Per-user record holding a bounded list of past intents. Written by `engine.refine`, read on the next refine to bias the LLM toward the user's prior preferences.
-- **Generate vs. refine** — Two engine methods. `generate` is stateless and cache-warm. `refine` reads + writes the profile and pays for personalization with reduced cache hit rate.
+- **FluidChat** — Client-side chat widget (`@fluid/react`). Lets users modify the IR conversationally. Shows suggestions, version history, and revert controls.
+- **Adapter** — A pluggable backing store (`CacheAdapter`, `RateLimiter`, `ProfileStore`, `UsageTracker`) the consumer supplies to `createEngine`. Defaults are in-memory; `@fluid/db` provides Postgres implementations.
+- **BYOK** — Bring Your Own Key. The consumer's API key (Anthropic or Gemini), passed to `createEngine({ provider })`. The library never reads env vars.
+- **LLMProvider** — Provider-agnostic interface. `AnthropicProvider` (Claude Opus 4.7) and `GeminiProvider` (Gemini 2.5 Flash) ship today.
+- **IntentProfile** — Per-user record holding a bounded list of past intents. Written by `engine.refine`, read on the next refine to bias the LLM.
+- **Generate vs. refine vs. patch** — Three engine methods. `generate` is stateless and cache-warm. `refine` reads + writes the profile for personalization. `patch` modifies an existing IR conversationally.
+
+---
+
+## CRM Demo App
+
+The `crm/` directory is a full consumer integration demonstrating all Fluid features on a 10-entity CRM schema.
+
+### Entities
+
+User, Account, Contact, Lead, Deal, Activity, Product, Quote, Case, Campaign
+
+### Routes
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/generate` | POST | Intent → IR generation (with snapshot) |
+| `/api/chat` | POST/GET | Chatbot: patch IR via LLM / load history |
+| `/api/chat/revert` | POST | Revert to a previous snapshot |
+| `/api/ir/history` | GET | Snapshot version chain |
+| `/api/suggestions` | GET | Pending AI suggestions |
+| `/api/suggestions/resolve` | POST | Accept or dismiss a suggestion |
+| `/api/telemetry` | POST | Usage event batch recording |
+| `/api/mutate` | POST | Execute schema-declared mutations |
+| `/api/refresh` | POST | Background re-generation with suggestions |
+| `/api/usage` | GET | Usage summary for a user |
+
+### Architecture
+
+```
+page.tsx (server)        → fetches CRM data, strips functions from schema
+  └── CrmDashboard.tsx   → "use client", hosts FluidView + FluidChat + hooks
+        ├── FluidView     → renders the current IR
+        ├── FluidChat     → chatbot widget (bottom-right)
+        ├── useFluidTelemetry → tracks usage events
+        └── useMutations  → handles mutation actions
+```
+
+### Running
+
+```bash
+# Set env vars in crm/.env.local:
+# GEMINI_API_KEY=your-google-ai-studio-key
+# DATABASE_URL=your-postgres-connection-string
+
+cd crm && bun run dev  # http://localhost:3001
+```

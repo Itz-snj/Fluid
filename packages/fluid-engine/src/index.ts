@@ -42,6 +42,12 @@ export type {
 export {
   createAnthropicProvider,
   AnthropicProvider,
+  createGeminiProvider,
+  GeminiProvider,
+  createOpenRouterProvider,
+  OpenRouterProvider,
+  createGroqProvider,
+  GroqProvider,
 } from "./llm";
 export type {
   LLMProvider,

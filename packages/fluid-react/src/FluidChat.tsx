@@ -13,13 +13,28 @@ export interface FluidChatProps {
   userId: string;
   schemaName?: string;
   currentSnapshotId?: string;
+  currentIR?: FluidIR;
   onIRChange: (newIR: FluidIR, snapshotId: string, version: number) => void;
 }
+
+const S = {
+  bg: "rgba(8,11,20,0.92)",
+  border: "rgba(255,255,255,0.08)",
+  borderHover: "rgba(99,102,241,0.4)",
+  text1: "rgba(255,255,255,0.92)",
+  text2: "rgba(255,255,255,0.55)",
+  text3: "rgba(255,255,255,0.3)",
+  accent: "#6366f1",
+  accent2: "#8b5cf6",
+  radius: "16px",
+  radiusSm: "10px",
+};
 
 export function FluidChat({
   userId,
   schemaName = "tasks",
   currentSnapshotId,
+  currentIR,
   onIRChange,
 }: FluidChatProps) {
   const [open, setOpen] = useState(false);
@@ -36,14 +51,8 @@ export function FluidChat({
     acceptSuggestion,
     dismissSuggestion,
     revert,
-  } = useFluidChat({
-    userId,
-    schemaName,
-    currentSnapshotId,
-    onIRChange,
-  });
+  } = useFluidChat({ userId, schemaName, currentSnapshotId, currentIR, onIRChange });
 
-  // Auto-scroll to bottom when messages change.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, suggestions, isPatching]);
@@ -55,19 +64,61 @@ export function FluidChat({
     await sendMessage(text);
   };
 
+  /* ── FAB (closed state) ─────────────────────────────────── */
   if (!open) {
     return (
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 right-6 z-50 h-14 w-14 rounded-full bg-gradient-to-br from-blue-500 to-violet-600 text-white shadow-xl hover:shadow-2xl hover:scale-105 transition-all duration-200 flex items-center justify-center"
         title="Open Fluid Chat"
+        style={{
+          position: "fixed",
+          bottom: "24px",
+          right: "24px",
+          zIndex: 9999,
+          height: "52px",
+          width: "52px",
+          borderRadius: "16px",
+          border: "none",
+          background: `linear-gradient(135deg, ${S.accent}, ${S.accent2}, #a855f7)`,
+          boxShadow: "0 8px 32px rgba(99,102,241,0.35), 0 0 0 1px rgba(99,102,241,0.15)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          transition: "transform 0.2s, box-shadow 0.2s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = "scale(1.07)";
+          e.currentTarget.style.boxShadow = "0 12px 40px rgba(99,102,241,0.5), 0 0 0 1px rgba(99,102,241,0.2)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = "scale(1)";
+          e.currentTarget.style.boxShadow = "0 8px 32px rgba(99,102,241,0.35), 0 0 0 1px rgba(99,102,241,0.15)";
+        }}
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
         </svg>
         {suggestions.length > 0 && (
-          <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-400 text-xs text-black flex items-center justify-center font-bold">
+          <span style={{
+            position: "absolute",
+            top: "-6px",
+            right: "-6px",
+            height: "20px",
+            minWidth: "20px",
+            padding: "0 4px",
+            borderRadius: "10px",
+            background: "linear-gradient(135deg, #f59e0b, #f97316)",
+            boxShadow: "0 2px 8px rgba(245,158,11,0.5)",
+            fontSize: "10px",
+            fontWeight: 700,
+            color: "white",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            border: "2px solid rgba(8,11,20,0.9)",
+          }}>
             {suggestions.length}
           </span>
         )}
@@ -75,27 +126,95 @@ export function FluidChat({
     );
   }
 
+  /* ── Open panel ─────────────────────────────────────────── */
   return (
-    <div className="fixed bottom-6 right-6 z-50 w-96 max-h-[70vh] rounded-2xl border border-zinc-700 bg-zinc-900 shadow-2xl flex flex-col overflow-hidden" style={{ backdropFilter: "blur(20px)" }}>
+    <div style={{
+      position: "fixed",
+      bottom: "24px",
+      right: "24px",
+      zIndex: 9999,
+      width: "380px",
+      maxHeight: "72vh",
+      borderRadius: S.radius,
+      background: S.bg,
+      backdropFilter: "blur(28px) saturate(1.4)",
+      WebkitBackdropFilter: "blur(28px) saturate(1.4)",
+      border: `1px solid ${S.border}`,
+      boxShadow: "0 24px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.04)",
+      display: "flex",
+      flexDirection: "column",
+      overflow: "hidden",
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 bg-zinc-900/80">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-sm font-semibold text-zinc-100">Fluid Assistant</span>
+      <div style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "14px 16px",
+        borderBottom: `1px solid ${S.border}`,
+        flexShrink: 0,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div style={{
+            height: "30px",
+            width: "30px",
+            borderRadius: "9px",
+            background: `linear-gradient(135deg, ${S.accent}, #a855f7)`,
+            boxShadow: "0 0 14px rgba(99,102,241,0.35)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+          }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
+          <div>
+            <div style={{ fontSize: "13px", fontWeight: 600, color: S.text1 }}>Fluid Assistant</div>
+            <div style={{ display: "flex", alignItems: "center", gap: "5px", marginTop: "2px" }}>
+              <div style={{ height: "5px", width: "5px", borderRadius: "50%", background: "#10b981", boxShadow: "0 0 5px rgba(16,185,129,0.6)" }} />
+              <span style={{ fontSize: "10px", color: S.text3 }}>Online</span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-1">
+
+        <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
           <button
             type="button"
             onClick={() => setShowHistory(!showHistory)}
-            className="text-xs text-zinc-400 hover:text-zinc-200 px-2 py-1 rounded hover:bg-zinc-800 transition"
-            title="Version history"
+            style={{
+              fontSize: "11px",
+              padding: "5px 10px",
+              borderRadius: "8px",
+              border: showHistory ? "1px solid rgba(139,92,246,0.3)" : "1px solid transparent",
+              background: showHistory ? "rgba(139,92,246,0.12)" : "transparent",
+              color: showHistory ? "#a78bfa" : S.text3,
+              cursor: "pointer",
+              fontFamily: "inherit",
+              transition: "all 0.18s",
+            }}
           >
-            {showHistory ? "Chat" : `History`}
+            {showHistory ? "← Chat" : "History"}
           </button>
           <button
             type="button"
             onClick={() => setOpen(false)}
-            className="text-zinc-500 hover:text-zinc-200 px-1.5 py-0.5 rounded hover:bg-zinc-800 transition"
+            style={{
+              fontSize: "14px",
+              padding: "4px 8px",
+              borderRadius: "8px",
+              border: "none",
+              background: "transparent",
+              color: S.text3,
+              cursor: "pointer",
+              transition: "all 0.18s",
+              lineHeight: 1,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.color = S.text1; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = S.text3; }}
           >
             ✕
           </button>
@@ -103,19 +222,43 @@ export function FluidChat({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-[200px] max-h-[50vh]">
+      <div style={{
+        flex: 1,
+        overflowY: "auto",
+        padding: "14px 14px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        minHeight: "180px",
+        maxHeight: "50vh",
+        scrollbarWidth: "thin",
+        scrollbarColor: "rgba(255,255,255,0.08) transparent",
+      }}>
         {showHistory ? (
           <HistoryPanel history={irHistory} onRevert={revert} isPatching={isPatching} />
         ) : (
           <>
-            {/* Welcome message if empty */}
             {messages.length === 0 && suggestions.length === 0 && (
-              <div className="text-xs text-zinc-500 italic py-4 text-center">
-                Tell me how to customize this layout. For example: &quot;Move the task section to the top&quot; or &quot;Show tasks as a kanban board&quot;.
+              <div style={{ textAlign: "center", padding: "28px 0" }}>
+                <div style={{
+                  display: "inline-flex",
+                  height: "44px",
+                  width: "44px",
+                  borderRadius: "14px",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "linear-gradient(135deg, rgba(99,102,241,0.12), rgba(168,85,247,0.12))",
+                  border: "1px solid rgba(99,102,241,0.15)",
+                  marginBottom: "12px",
+                }}>
+                  <span style={{ fontSize: "18px" }}>✨</span>
+                </div>
+                <p style={{ fontSize: "12px", color: S.text3, lineHeight: 1.7, maxWidth: "220px", margin: "0 auto" }}>
+                  Tell me how to customize this layout. Try &quot;Add filters&quot; or &quot;Show deals first&quot;.
+                </p>
               </div>
             )}
 
-            {/* Suggestion cards */}
             {suggestions.map((s) => (
               <SuggestionCard
                 key={s.id}
@@ -126,7 +269,6 @@ export function FluidChat({
               />
             ))}
 
-            {/* Chat messages */}
             {messages.map((msg, i) => (
               <MessageBubble
                 key={msg.id ?? `${msg.role}-${i}`}
@@ -136,11 +278,28 @@ export function FluidChat({
               />
             ))}
 
-            {/* Patching indicator */}
             {isPatching && (
-              <div className="flex items-center gap-2 text-xs text-zinc-500 py-2">
-                <div className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" />
-                <span>Applying changes…</span>
+              <div style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: "rgba(99,102,241,0.06)",
+                border: "1px solid rgba(99,102,241,0.12)",
+                fontSize: "12px",
+                color: S.text2,
+              }}>
+                <div style={{
+                  height: "12px",
+                  width: "12px",
+                  borderRadius: "50%",
+                  border: "2px solid rgba(99,102,241,0.3)",
+                  borderTopColor: S.accent,
+                  animation: "spin 0.7s linear infinite",
+                  flexShrink: 0,
+                }} />
+                Applying changes…
               </div>
             )}
 
@@ -152,11 +311,15 @@ export function FluidChat({
       {/* Input bar */}
       {!showHistory && (
         <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            void handleSend();
+          onSubmit={(e) => { e.preventDefault(); void handleSend(); }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "12px 14px",
+            borderTop: `1px solid ${S.border}`,
+            flexShrink: 0,
           }}
-          className="flex items-center gap-2 px-4 py-3 border-t border-zinc-800"
         >
           <input
             type="text"
@@ -164,50 +327,92 @@ export function FluidChat({
             onChange={(e) => setInput(e.target.value)}
             placeholder="Describe a layout change…"
             disabled={isPatching}
-            className="flex-1 rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:border-blue-500 transition disabled:opacity-50"
+            style={{
+              flex: 1,
+              padding: "9px 14px",
+              borderRadius: "10px",
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.04)",
+              color: S.text1,
+              fontSize: "12px",
+              fontFamily: "inherit",
+              outline: "none",
+              transition: "border-color 0.18s, box-shadow 0.18s",
+              opacity: isPatching ? 0.4 : 1,
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = "rgba(99,102,241,0.45)";
+              e.currentTarget.style.boxShadow = "0 0 0 3px rgba(99,102,241,0.08)";
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)";
+              e.currentTarget.style.boxShadow = "none";
+            }}
           />
           <button
             type="submit"
             disabled={isPatching || !input.trim()}
-            className="rounded-lg bg-blue-600 text-white px-3 py-2 text-sm font-medium hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 transition"
+            style={{
+              padding: "9px 16px",
+              borderRadius: "10px",
+              border: "none",
+              background: isPatching || !input.trim()
+                ? "rgba(255,255,255,0.05)"
+                : `linear-gradient(135deg, ${S.accent}, ${S.accent2})`,
+              color: isPatching || !input.trim() ? S.text3 : "white",
+              fontSize: "12px",
+              fontWeight: 600,
+              fontFamily: "inherit",
+              cursor: isPatching || !input.trim() ? "not-allowed" : "pointer",
+              boxShadow: isPatching || !input.trim() ? "none" : "0 4px 14px rgba(99,102,241,0.3)",
+              transition: "all 0.18s",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
           >
             Send
           </button>
         </form>
       )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
 
-// ── Sub-components ──────────────────────────────────────────
-
-function MessageBubble({
-  message,
-  onRevert,
-  isPatching,
-}: {
-  message: ChatMessage;
-  onRevert?: () => void;
-  isPatching: boolean;
-}) {
+/* ── MessageBubble ──────────────────────────────────────────── */
+function MessageBubble({ message, onRevert, isPatching }: { message: ChatMessage; onRevert?: () => void; isPatching: boolean }) {
   const isUser = message.role === "user";
-
   return (
-    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-      <div
-        className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${
-          isUser
-            ? "bg-blue-600 text-white rounded-br-sm"
-            : "bg-zinc-800 text-zinc-200 rounded-bl-sm"
-        }`}
-      >
-        <p className="whitespace-pre-wrap">{message.content}</p>
+    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start" }}>
+      <div style={{
+        maxWidth: "85%",
+        padding: "9px 13px",
+        borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+        fontSize: "12px",
+        lineHeight: 1.6,
+        ...(isUser
+          ? { background: `linear-gradient(135deg, ${S.accent}, #7c3aed)`, color: "white", boxShadow: "0 4px 14px rgba(99,102,241,0.25)" }
+          : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)", color: "rgba(226,232,240,0.9)" }),
+      }}>
+        <p style={{ whiteSpace: "pre-wrap", margin: 0 }}>{message.content}</p>
         {!isUser && message.wasApplied && onRevert && (
           <button
             type="button"
             onClick={onRevert}
             disabled={isPatching}
-            className="mt-1.5 text-xs text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
+            style={{
+              marginTop: "6px",
+              fontSize: "11px",
+              color: "rgba(129,140,248,0.8)",
+              background: "transparent",
+              border: "none",
+              padding: 0,
+              cursor: "pointer",
+              textDecoration: "underline",
+              fontFamily: "inherit",
+              opacity: isPatching ? 0.4 : 1,
+            }}
           >
             ↩ Revert this change
           </button>
@@ -217,40 +422,19 @@ function MessageBubble({
   );
 }
 
-function SuggestionCard({
-  suggestion,
-  onAccept,
-  onDismiss,
-  disabled,
-}: {
-  suggestion: SuggestionItem;
-  onAccept: () => void;
-  onDismiss: () => void;
-  disabled: boolean;
-}) {
+/* ── SuggestionCard ─────────────────────────────────────────── */
+function SuggestionCard({ suggestion, onAccept, onDismiss, disabled }: { suggestion: SuggestionItem; onAccept: () => void; onDismiss: () => void; disabled: boolean }) {
   return (
-    <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 p-3 text-sm">
-      <div className="flex items-start gap-2">
-        <span className="text-amber-400 text-base mt-0.5">💡</span>
-        <div className="flex-1">
-          <p className="text-zinc-200">{suggestion.message}</p>
-          <div className="flex gap-2 mt-2">
-            <button
-              type="button"
-              onClick={onAccept}
-              disabled={disabled}
-              className="text-xs rounded-md bg-emerald-600 text-white px-3 py-1 hover:bg-emerald-500 disabled:opacity-50 transition"
-            >
-              Apply
-            </button>
-            <button
-              type="button"
-              onClick={onDismiss}
-              disabled={disabled}
-              className="text-xs rounded-md bg-zinc-700 text-zinc-300 px-3 py-1 hover:bg-zinc-600 disabled:opacity-50 transition"
-            >
-              Dismiss
-            </button>
+    <div style={{ borderRadius: "12px", padding: "14px", background: "rgba(245,158,11,0.04)", border: "1px solid rgba(245,158,11,0.12)", fontSize: "12px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+        <div style={{ height: "28px", width: "28px", borderRadius: "9px", display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.15)", flexShrink: 0 }}>
+          <span style={{ fontSize: "13px" }}>💡</span>
+        </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ color: "rgba(226,232,240,0.9)", lineHeight: 1.6, margin: "0 0 10px" }}>{suggestion.message}</p>
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button type="button" onClick={onAccept} disabled={disabled} style={{ fontSize: "11px", padding: "5px 12px", borderRadius: "8px", border: "none", background: "linear-gradient(135deg, #10b981, #059669)", color: "white", fontWeight: 600, cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, fontFamily: "inherit" }}>Apply</button>
+            <button type="button" onClick={onDismiss} disabled={disabled} style={{ fontSize: "11px", padding: "5px 12px", borderRadius: "8px", border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "rgba(148,163,184,0.8)", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.5 : 1, fontFamily: "inherit" }}>Dismiss</button>
           </div>
         </div>
       </div>
@@ -258,74 +442,35 @@ function SuggestionCard({
   );
 }
 
-function HistoryPanel({
-  history,
-  onRevert,
-  isPatching,
-}: {
-  history: SnapshotMeta[];
-  onRevert: (snapshotId: string) => void;
-  isPatching: boolean;
-}) {
+/* ── HistoryPanel ───────────────────────────────────────────── */
+function HistoryPanel({ history, onRevert, isPatching }: { history: SnapshotMeta[]; onRevert: (id: string) => void; isPatching: boolean }) {
   if (history.length === 0) {
-    return (
-      <div className="text-xs text-zinc-500 italic py-4 text-center">
-        No version history yet. Generate a UI to get started.
-      </div>
-    );
+    return <div style={{ textAlign: "center", padding: "28px 0", fontSize: "12px", color: "rgba(255,255,255,0.25)", fontStyle: "italic" }}>No version history yet.</div>;
   }
-
+  const sourceStyle: Record<string, React.CSSProperties> = {
+    generate: { background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.2)", color: "#6ee7b7" },
+    patch:    { background: "rgba(99,102,241,0.1)", border: "1px solid rgba(99,102,241,0.2)", color: "#a5b4fc" },
+    revert:   { background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.2)", color: "#fcd34d" },
+    suggestion:{ background: "rgba(168,85,247,0.1)", border: "1px solid rgba(168,85,247,0.2)", color: "#c4b5fd" },
+  };
   return (
-    <div className="space-y-2">
-      <div className="text-xs uppercase tracking-wider text-zinc-500 mb-2">
-        Version History
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+      <div style={{ fontSize: "10px", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600, color: "rgba(255,255,255,0.28)", marginBottom: "4px" }}>Version History</div>
       {history.map((s, i) => (
-        <div
-          key={s.id}
-          className={`rounded-lg border p-3 text-xs ${
-            i === 0
-              ? "border-blue-700 bg-blue-950/20"
-              : "border-zinc-800 bg-zinc-900"
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-zinc-300">v{s.version}</span>
-              <span
-                className={`px-1.5 py-0.5 rounded text-[10px] uppercase tracking-wider ${
-                  s.source === "generate"
-                    ? "bg-emerald-900 text-emerald-300"
-                    : s.source === "patch"
-                      ? "bg-blue-900 text-blue-300"
-                      : s.source === "revert"
-                        ? "bg-amber-900 text-amber-300"
-                        : "bg-violet-900 text-violet-300"
-                }`}
-              >
-                {s.source}
-              </span>
+        <div key={s.id} style={{ borderRadius: "10px", padding: "12px", fontSize: "12px", background: i === 0 ? "rgba(99,102,241,0.06)" : "rgba(255,255,255,0.02)", border: i === 0 ? "1px solid rgba(99,102,241,0.15)" : "1px solid rgba(255,255,255,0.05)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span style={{ fontFamily: "monospace", fontWeight: 600, color: "rgba(255,255,255,0.8)" }}>v{s.version}</span>
+              <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "6px", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 500, ...(sourceStyle[s.source] ?? sourceStyle.generate) }}>{s.source}</span>
             </div>
-            {i > 0 && (
-              <button
-                type="button"
-                onClick={() => onRevert(s.id)}
-                disabled={isPatching}
-                className="text-blue-400 hover:text-blue-300 underline underline-offset-2 disabled:opacity-50"
-              >
-                Revert
-              </button>
-            )}
-            {i === 0 && (
-              <span className="text-emerald-400">current</span>
+            {i > 0 ? (
+              <button type="button" onClick={() => onRevert(s.id)} disabled={isPatching} style={{ fontSize: "11px", color: "#818cf8", background: "transparent", border: "none", cursor: isPatching ? "not-allowed" : "pointer", textDecoration: "underline", opacity: isPatching ? 0.4 : 1, fontFamily: "inherit" }}>Revert</button>
+            ) : (
+              <span style={{ fontSize: "10px", fontWeight: 600, color: "#34d399", textTransform: "uppercase", letterSpacing: "0.06em" }}>current</span>
             )}
           </div>
-          {s.changeDesc && (
-            <p className="text-zinc-400 mt-1 truncate">{s.changeDesc}</p>
-          )}
-          <p className="text-zinc-600 mt-0.5">
-            {new Date(s.createdAt).toLocaleString()}
-          </p>
+          {s.changeDesc && <p style={{ color: "rgba(148,163,184,0.7)", marginTop: "6px", marginBottom: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.changeDesc}</p>}
+          <p style={{ color: "rgba(255,255,255,0.2)", marginTop: "4px", marginBottom: 0, fontSize: "10px" }}>{new Date(s.createdAt).toLocaleString()}</p>
         </div>
       ))}
     </div>
