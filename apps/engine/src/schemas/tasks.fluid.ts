@@ -72,4 +72,36 @@ export const taskSchema = defineSchema({
     listTasks: { entity: "Task", fetch: () => tasks },
     listSnippets: { entity: "Snippet", fetch: () => snippets },
   },
+  mutations: {
+    completeTask: {
+      entity: "Task",
+      args: { id: { type: "string", required: true } },
+      handler: async (args: Record<string, unknown>) => {
+        const task = tasks.find((t) => t.id === args.id);
+        if (!task) return { ok: false, error: `Task "${String(args.id)}" not found` };
+        task.status = "done";
+        return { ok: true };
+      },
+      label: "Mark a task as done",
+    },
+    updateTaskStatus: {
+      entity: "Task",
+      args: {
+        id: { type: "string", required: true },
+        status: { type: "enum", required: true },
+      },
+      handler: async (args: Record<string, unknown>) => {
+        const task = tasks.find((t) => t.id === args.id);
+        if (!task) return { ok: false, error: `Task "${String(args.id)}" not found` };
+        const allowed = ["backlog", "in_progress", "review", "done"];
+        if (!allowed.includes(String(args.status))) {
+          return { ok: false, error: `Invalid status "${String(args.status)}"` };
+        }
+        task.status = args.status as Task["status"];
+        return { ok: true };
+      },
+      label: "Change the status of a task",
+    },
+  },
 });
+

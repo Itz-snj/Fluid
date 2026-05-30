@@ -11,3 +11,10 @@ export type {
 
 export { useFluidIR } from "./useFluidIR";
 export type { UseFluidIROptions, UseFluidIRState } from "./useFluidIR";
+
+export { useFluidTelemetry } from "./useFluidTelemetry";
+export type { UseFluidTelemetryOptions } from "./useFluidTelemetry";
+
+export { useMutations } from "./useMutations";
+export type { UseMutationsOptions } from "./useMutations";
+

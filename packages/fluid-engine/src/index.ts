@@ -1,6 +1,6 @@
 // Public entry point for @fluid/engine.
 
-export { createEngine } from "./engine";
+export { createEngine, buildExpandedIntent } from "./engine";
 export type {
   CreateEngineOptions,
   EngineGenerateOptions,
@@ -29,6 +29,14 @@ export type {
   ProfileStore,
   IntentProfile,
   IntentHistoryEntry,
+  // New adapter interfaces
+  UsageEvent,
+  UsageSummary,
+  UsageTracker,
+  ContextSignals,
+  ContextEnricher,
+  RefreshDecision,
+  RefreshPolicy,
 } from "./adapters";
 
 export {
@@ -42,3 +50,4 @@ export type {
 } from "./llm";
 
 export { buildSystemPrompt } from "./prompt";
+

@@ -35,11 +35,14 @@ Nodes — discriminated union by \`type\`:
 - **grid** — N-column grid. \`{type, cols?: 2|3|4, children: Node[]}\`
 - **kanban** — columns of cards grouped by a field. \`{type, query: Query, groupBy: string, columns: string[], card: Card}\`
 - **list** — vertical list of items, optionally grouped. \`{type, query: Query, variant?: "compact"|"comfortable", item: Node, emptyText?: string, groupHeader?: boolean}\`
-- **card** — titled box with badges and fields. \`{type, title?: Binding|string, subtitle?: Binding|string, fields?: Field[], badges?: Badge[]}\`
+- **card** — titled box with badges and fields. \`{type, title?: Binding|string, subtitle?: Binding|string, fields?: Field[], badges?: Badge[], actions?: Action[]}\`
 - **stat** — single-number summary tile. \`{type, label: string, query: Query, aggregate: "count"|"sum"|"countWhere", field?: string, whereField?: string, whereValue?: string|number}\`
 - **heading** — title text. \`{type, text: string, level?: 1|2|3}\`
 - **field** — labeled value bound to an entity field. \`{type, binding: Binding, label?: string}\`
 - **badge** — chip bound to a field. \`{type, binding: Binding, tone?: "neutral"|"info"|"success"|"warn"|"danger"}\`
+- **action** — interactive button that fires a declared mutation. \`{type, label: string, mutation: string, args: Record<string, Binding|string|number|boolean>, style?: "primary"|"secondary"|"danger", confirmText?: string}\`
+  - Place action nodes inside \`card.actions[]\` to give each row a contextual button.
+  - Use a Binding for row-specific args (e.g. the row's \`id\`). Use a literal for fixed values.
 
 Binding: \`{kind: "binding", entity: string, field?: string, format?: "text"|"date"|"relative-date"|"badge"|"priority"}\`
 Query: \`{entity: string, filter?: {field, op: "eq"|"neq"|"in"|"gte"|"lte", value}, groupBy?: string, sortBy?: string, limit?: number}\`
@@ -54,6 +57,7 @@ Query: \`{entity: string, filter?: {field, op: "eq"|"neq"|"in"|"gte"|"lte", valu
 6. Use \`format: "priority"\` on priority badges so the renderer can color them by severity (p0 → danger, p1 → warn, etc).
 7. Use \`format: "relative-date"\` on due-date fields so they render as "in 3d" / "yesterday".
 8. Output is JSON only. No markdown fences. No commentary.
+9. \`action.mutation\` MUST match a key declared in the schema's mutations section. \`action.args\` keys must match the mutation's declared argument names. Use a Binding (not a literal string) for any arg that should come from the current row (e.g. the row id).
 
 # Schema declared by the developer
 
@@ -69,7 +73,10 @@ ${JSON.stringify(serializeSchema(schema), null, 2)}
 - Show data the user said they care about; hide everything else.
 - Group, filter, and sort to surface what's important first.
 - Use compact lists when the user mentioned high volume; comfortable cards when they want detail per item.
-- Pick a layout that fits the intent: kanban for status workflows, split-panel for two related entities, dashboard with stats for high-level overviews, simple list for "just show me everything."
+- Pick a layout that fits the intent: kanban for status workflows, split-panel for two related entities, dashboard with stats for high-level overviews, simple list for \"just show me everything.\"
+- When usage observations are provided, **prioritise sections the user interacts with** and omit or collapse sections they never touch.
+- When a \`currentUserName\` is given in the context, use it to resolve possessive references (\"my deals\" \u2192 filter owner equals that name).
+- When mutations are declared, place action buttons (\`card.actions\`) on cards where the mutation is contextually useful. Prefer a single, clear label (\"Mark done\", \"Move to next stage\").
 
 Now output the IR JSON.`;
 }
@@ -97,5 +104,21 @@ function serializeSchema(schema: FluidSchema) {
         { entity: ep.entity },
       ]),
     ),
+    // Mutations are serialised without the handler — the LLM only needs
+    // the name, arg types, and label to write correct ActionNodes.
+    mutations: schema.mutations
+      ? Object.fromEntries(
+          Object.entries(schema.mutations).map(([name, m]) => [
+            name,
+            {
+              entity: m.entity,
+              args: Object.fromEntries(
+                Object.entries(m.args).map(([k, v]) => [k, { type: v.type, required: v.required }]),
+              ),
+              label: m.label,
+            },
+          ]),
+        )
+      : undefined,
   };
 }

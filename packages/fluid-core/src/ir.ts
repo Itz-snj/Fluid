@@ -47,7 +47,8 @@ export type IRNode =
   | StatNode
   | HeadingNode
   | FieldNode
-  | BadgeNode;
+  | BadgeNode
+  | ActionNode;
 
 export interface StackNode {
   type: "stack";
@@ -97,6 +98,8 @@ export interface CardNode {
   subtitle?: Binding | string;
   fields?: FieldNode[];
   badges?: BadgeNode[];
+  /** Interactive action buttons rendered at the bottom of the card. */
+  actions?: ActionNode[];
   id?: string;
   className?: string;
 }
@@ -133,6 +136,31 @@ export interface BadgeNode {
   className?: string;
 }
 
+/**
+ * Interactive button bound to a developer-declared mutation.
+ *
+ * `mutation` must match a key in the schema's `mutations` map.
+ * `args` values are either literal scalars or Bindings resolved
+ * from the current row context (e.g. the card's data record).
+ */
+export interface ActionNode {
+  type: "action";
+  /** Button label shown to the user. */
+  label: string;
+  /** Must match a key in schema.mutations. */
+  mutation: string;
+  /**
+   * Argument values. Use a Binding to pull from the current row,
+   * or a literal string/number/boolean.
+   */
+  args: Record<string, Binding | string | number | boolean>;
+  style?: "primary" | "secondary" | "danger";
+  /** If set, the renderer shows a confirm dialog before firing. */
+  confirmText?: string;
+  id?: string;
+  className?: string;
+}
+
 const lazy = <T>(s: () => z.ZodType<T>) => z.lazy(s);
 
 const BadgeNodeSchema: z.ZodType<BadgeNode> = z.object({
@@ -155,6 +183,7 @@ const CardNodeSchema: z.ZodType<CardNode> = z.object({
   subtitle: z.union([BindingSchema, z.string()]).optional(),
   fields: z.array(FieldNodeSchema).optional(),
   badges: z.array(BadgeNodeSchema).optional(),
+  actions: z.array(z.lazy(() => ActionNodeSchema)).optional(),
   ...BaseNode,
 });
 
@@ -188,8 +217,22 @@ const NodeSchema: z.ZodType<IRNode> = lazy(() =>
     HeadingNodeSchema,
     FieldNodeSchema,
     BadgeNodeSchema,
+    ActionNodeSchema,
   ]),
 );
+
+const ActionNodeSchema: z.ZodType<ActionNode> = z.object({
+  type: z.literal("action"),
+  label: z.string(),
+  mutation: IdentifierSchema,
+  args: z.record(
+    z.string(),
+    z.union([BindingSchema, z.string(), z.number(), z.boolean()]),
+  ),
+  style: z.enum(["primary", "secondary", "danger"]).optional(),
+  confirmText: z.string().optional(),
+  ...BaseNode,
+});
 
 const StackNodeSchema: z.ZodType<StackNode> = z.object({
   type: z.literal("stack"),

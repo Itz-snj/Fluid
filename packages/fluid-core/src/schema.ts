@@ -30,10 +30,30 @@ export interface EndpointDef<T = unknown> {
   fetch: () => Promise<T[]> | T[];
 }
 
+/**
+ * A mutation is a developer-declared write operation.
+ *
+ * The LLM sees only name/args/label (serialized from the schema).
+ * The handler runs exclusively server-side inside the consumer's
+ * /api/mutate route — never touched by the renderer or the engine.
+ */
+export interface MutationDef<TArgs = Record<string, unknown>> {
+  /** Which entity this mutation primarily operates on. */
+  entity: string;
+  /** Argument declarations — used for server-side validation and LLM instruction. */
+  args: Record<string, { type: FieldType; required?: boolean }>;
+  /** Server-side handler. Receives validated args. */
+  handler: (args: TArgs) => Promise<{ ok: boolean; error?: string }>;
+  /** Short human-readable label surfaced in the system prompt. */
+  label?: string;
+}
+
 export interface FluidSchema {
   name: string;
   entities: Record<string, EntityDef>;
   endpoints: Record<string, EndpointDef>;
+  /** Optional write operations the LLM may reference in ActionNodes. */
+  mutations?: Record<string, MutationDef>;
 }
 
 export function defineSchema<S extends FluidSchema>(schema: S): S {

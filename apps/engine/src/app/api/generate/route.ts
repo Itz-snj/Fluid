@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { intentKey } from "@fluid/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
-import { getEngine } from "@/lib/engine";
+import { getEngine, getDb } from "@/lib/engine";
+import { enqueueRefreshJob } from "@fluid/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -16,6 +17,10 @@ const BodySchema = z
     userId: z.string().min(1).max(128).optional(),
     /** When true, run the learning loop (engine.refine). Requires userId. */
     learn: z.boolean().optional(),
+    // Context signals — forwarded to the ContextEnricher
+    role: z.string().max(64).optional(),
+    device: z.enum(["mobile", "tablet", "desktop"]).optional(),
+    currentUserName: z.string().max(128).optional(),
   })
   .refine((b) => !b.learn || !!b.userId, {
     message: "learn=true requires a userId",
@@ -61,7 +66,11 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { intent, bypassCache, userId, learn } = parsed.data;
+  const { intent, bypassCache, userId, learn, role, device, currentUserName } = parsed.data;
+
+  const contextSignals = (role || device || currentUserName)
+    ? { role, device, currentUserName }
+    : undefined;
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), SERVER_TIMEOUT_MS);
@@ -76,6 +85,7 @@ export async function POST(req: NextRequest) {
           userId: userId!,
           bypassCache: bypassCache === true,
           signal: ac.signal,
+          contextSignals,
         })
       : null;
     const result =
@@ -101,6 +111,24 @@ export async function POST(req: NextRequest) {
       usage: result.usage,
       historyLen: profile?.history.length,
     });
+
+    // Fire-and-forget: check if the user's IR should be refreshed in the background.
+    if (userId && result.cached) {
+      void engine
+        .checkRefresh({ userId, schemaName: taskSchema.name, lastGeneratedAt: Date.now() - latencyMs })
+        .then((decision) => {
+          if (decision.refresh) {
+            try {
+              const db = getDb();
+              void enqueueRefreshJob(db, userId, taskSchema.name, decision.reason ?? "policy");
+            } catch {
+              // DB might not be available in dev — ignore.
+            }
+          }
+        })
+        .catch(() => {});
+    }
+
     return NextResponse.json({
       ir: result.ir,
       cached: result.cached,

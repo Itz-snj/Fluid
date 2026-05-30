@@ -80,6 +80,7 @@ function walkNode(node: IRNode, ctx: WalkCtx, path: string): void {
       }
       node.fields?.forEach((f, i) => walkNode(f, ctx, `${path}.fields[${i}]`));
       node.badges?.forEach((b, i) => walkNode(b, ctx, `${path}.badges[${i}]`));
+      node.actions?.forEach((a, i) => walkNode(a, ctx, `${path}.actions[${i}]`));
       break;
     case "stat":
       checkQuery(node.query, ctx.schema, `${path}.query`);
@@ -102,6 +103,30 @@ function walkNode(node: IRNode, ctx: WalkCtx, path: string): void {
     case "badge":
       checkBinding(node.binding, ctx.schema, `${path}.binding`);
       break;
+    case "action": {
+      // Verify the mutation name is declared in the schema.
+      if (!ctx.schema.mutations?.[node.mutation]) {
+        throw new IRSemanticError(
+          `unknown mutation "${node.mutation}" — not declared in schema.mutations`,
+          `${path}.mutation`,
+        );
+      }
+      // Validate any binding-typed args (literal scalars need no check).
+      for (const [argName, argVal] of Object.entries(node.args)) {
+        if (
+          typeof argVal === "object" &&
+          argVal !== null &&
+          "kind" in argVal
+        ) {
+          checkBinding(
+            argVal as import("./ir").Binding,
+            ctx.schema,
+            `${path}.args.${argName}`,
+          );
+        }
+      }
+      break;
+    }
     case "heading":
       break;
   }
