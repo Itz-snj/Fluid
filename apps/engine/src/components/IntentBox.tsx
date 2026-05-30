@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import type { FluidIR } from "@/fluid/core";
-import { FluidView, type DataContext } from "@/fluid/react";
+import type { FluidIR } from "@fluid/core";
+import { FluidView, type DataContext } from "@fluid/react";
 
 interface IntentBoxProps {
   data: DataContext;

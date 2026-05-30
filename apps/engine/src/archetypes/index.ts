@@ -1,4 +1,4 @@
-import type { FluidIR } from "@/fluid/core";
+import type { FluidIR } from "@fluid/core";
 import { lawyerIR } from "./lawyer.ir";
 import { engineerIR } from "./engineer.ir";
 import { pmIR } from "./pm.ir";

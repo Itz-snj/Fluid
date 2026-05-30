@@ -1,4 +1,4 @@
-import { defineSchema } from "@/fluid/core";
+import { defineSchema } from "@fluid/core";
 
 export type Task = {
   id: string;

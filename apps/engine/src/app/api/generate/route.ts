@@ -1,24 +1,35 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { checkRateLimit, generateIR, intentKey } from "@/fluid/engine";
+import { intentKey } from "@fluid/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
+import { getEngine } from "@/lib/engine";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 const SERVER_TIMEOUT_MS = 90_000;
-const RATE = { limit: 20, windowMs: 60_000 };
 
 const BodySchema = z.object({
   intent: z.string().min(1, "intent must be non-empty").max(2000, "intent too long"),
   bypassCache: z.boolean().optional(),
+  userId: z.string().min(1).max(128).optional(),
 });
 
 export async function POST(req: NextRequest) {
   const started = Date.now();
   const ip = clientIP(req);
 
-  const rl = checkRateLimit(`gen:${ip}`, RATE);
+  let engine;
+  try {
+    engine = getEngine();
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : String(err) },
+      { status: 500 },
+    );
+  }
+
+  const rl = await engine.checkRateLimit(`gen:${ip}`);
   if (!rl.ok) {
     return NextResponse.json(
       { error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs },
@@ -43,25 +54,18 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { intent, bypassCache } = parsed.data;
-
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return NextResponse.json(
-      { error: "ANTHROPIC_API_KEY is not set on the server" },
-      { status: 500 },
-    );
-  }
+  const { intent, bypassCache, userId } = parsed.data;
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), SERVER_TIMEOUT_MS);
-  // Abort if the client disconnects.
   req.signal.addEventListener("abort", () => ac.abort(), { once: true });
 
-  const key = intentKey(taskSchema.name, intent);
+  const key = intentKey(taskSchema.name, intent, userId);
   try {
-    const result = await generateIR({
+    const result = await engine.generate({
       schema: taskSchema,
       intent,
+      userId,
       bypassCache: bypassCache === true,
       signal: ac.signal,
     });
@@ -128,7 +132,6 @@ interface GenLog {
 }
 
 function logGeneration(log: GenLog): void {
-  // Structured single-line JSON log for easy ingestion.
   const payload = { at: new Date().toISOString(), scope: "fluid.generate", ...log };
   if (log.ok) {
     console.log(JSON.stringify(payload));

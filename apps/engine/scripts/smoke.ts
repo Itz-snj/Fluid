@@ -2,7 +2,7 @@ import { lawyerIR } from "@/archetypes/lawyer.ir";
 import { engineerIR } from "@/archetypes/engineer.ir";
 import { pmIR } from "@/archetypes/pm.ir";
 import { taskSchema } from "@/schemas/tasks.fluid";
-import { checkIRAgainstSchema, validateIR } from "@/fluid/core";
+import { checkIRAgainstSchema, validateIR } from "@fluid/core";
 
 const cases: [string, unknown][] = [
   ["lawyer", lawyerIR],

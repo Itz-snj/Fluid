@@ -8,18 +8,23 @@ const MODEL = "claude-opus-4-7";
  *
  * - Uses Opus 4.7 with adaptive thinking — the IR generation task is non-trivial
  *   pattern-matching from intent + schema to a layout tree, so adaptive thinking
- *   is worth it. Effort defaults to "high" — bumped to "xhigh" for codegen.
+ *   is worth it. Effort defaults to "xhigh" for codegen.
  * - Streams the response so we can use a generous max_tokens (IRs can be ~4-8K
  *   tokens) without hitting SDK HTTP timeouts.
  * - System prompt is split into [stable | cache_control breakpoint | schema-context]
- *   so repeat requests with the same schema reuse the cache. The user message
- *   carries the volatile intent string and is never cached.
+ *   so repeat requests with the same schema reuse the provider-side cache. The
+ *   user message carries the volatile intent string and is never cached.
  */
 export class AnthropicProvider implements LLMProvider {
   readonly name = "anthropic";
   private client: Anthropic;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey: string) {
+    if (!apiKey) {
+      throw new Error(
+        "AnthropicProvider: apiKey is required. Pass it via createEngine({ apiKey }).",
+      );
+    }
     this.client = new Anthropic({ apiKey });
   }
 

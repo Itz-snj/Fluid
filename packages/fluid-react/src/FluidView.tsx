@@ -3,7 +3,7 @@ import {
   type FluidSchema,
   checkIRAgainstSchema,
   validateIR,
-} from "@/fluid/core";
+} from "@fluid/core";
 import { type DataContext } from "./data";
 import { renderNode } from "./render";
 

@@ -11,7 +11,7 @@ import type {
   SplitNode,
   StackNode,
   StatNode,
-} from "@/fluid/core";
+} from "@fluid/core";
 import { type DataContext, groupRows, resolveBinding, runQuery } from "./data";
 
 const gapMap = { sm: "gap-2", md: "gap-4", lg: "gap-6" } as const;

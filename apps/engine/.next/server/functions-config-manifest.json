@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/generate": {
+      "maxDuration": 120
+    }
+  }
+}

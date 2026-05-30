@@ -1,4 +1,4 @@
-import type { Binding, Query } from "@/fluid/core";
+import type { Binding, Query } from "@fluid/core";
 
 export type DataContext = Record<string, unknown[]>;
 

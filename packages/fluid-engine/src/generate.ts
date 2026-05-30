@@ -4,14 +4,17 @@ import {
   checkIRAgainstSchema,
   IRSemanticError,
   validateIR,
-} from "@/fluid/core";
-import { getProvider } from "./llm";
+} from "@fluid/core";
+import type { CacheAdapter } from "./adapters";
+import type { LLMProvider } from "./llm";
 import { buildSystemPrompt } from "./prompt";
-import { getCachedIR, intentKey, setCachedIR, singleFlight } from "./cache";
+import { intentKey } from "./cache";
 
 export interface GenerateIROptions {
   schema: FluidSchema;
   intent: string;
+  /** Optional namespace for the cache key (e.g. user id). */
+  userId?: string;
   /** Skip cache lookup. Useful for "regenerate" buttons. */
   bypassCache?: boolean;
   /** Optional abort signal forwarded to the provider. */
@@ -31,14 +34,22 @@ export interface GenerateIRResult {
   attempts: number;
 }
 
+interface GenerateIRDeps {
+  provider: LLMProvider;
+  cache: CacheAdapter;
+}
+
 const MAX_RETRIES = 1;
 
 /**
  * Schema + intent → validated IR.
  *
+ * Pure function over its dependencies — provider and cache are injected.
+ * Use the createEngine() factory if you don't want to wire these by hand.
+ *
  * Flow:
  *   1. Cache lookup. Cheap path — no LLM call.
- *   2. Single-flight: dedup concurrent calls with the same key.
+ *   2. Single-flight (if the adapter implements it): dedup concurrent calls.
  *   3. Build system prompt (stable, cacheable) + user message (volatile intent).
  *   4. Provider call.
  *   5. Strip optional code fences / extract balanced JSON, parse, validate
@@ -46,24 +57,27 @@ const MAX_RETRIES = 1;
  *   6. On parse/validate failure: ONE retry with the error fed back. If it fails
  *      a second time, throw — caller falls back to a preset archetype.
  */
-export async function generateIR(opts: GenerateIROptions): Promise<GenerateIRResult> {
-  const key = intentKey(opts.schema.name, opts.intent);
+export async function generateIR(
+  opts: GenerateIROptions,
+  deps: GenerateIRDeps,
+): Promise<GenerateIRResult> {
+  const { provider, cache } = deps;
+  const key = intentKey(opts.schema.name, opts.intent, opts.userId);
+
   if (!opts.bypassCache) {
-    const cached = getCachedIR(key);
+    const cached = await cache.get(key);
     if (cached) return { ir: cached, cached: true, usage: null, attempts: 0 };
   }
 
   let usage: GenerateIRResult["usage"] = null;
   let attempts = 0;
 
-  const ir = await singleFlight(key, async () => {
-    // Re-check cache inside the single-flight in case another waiter populated it.
+  const work = async (): Promise<FluidIR> => {
     if (!opts.bypassCache) {
-      const cached = getCachedIR(key);
+      const cached = await cache.get(key);
       if (cached) return cached;
     }
 
-    const provider = getProvider();
     const systemPrompt = buildSystemPrompt(opts.schema);
     let userMessage = `User intent: ${opts.intent.trim()}\n\nOutput the IR JSON now.`;
 
@@ -83,7 +97,7 @@ export async function generateIR(opts: GenerateIROptions): Promise<GenerateIRRes
         const parsed = parseIR(result.text);
         const validated = validateIR(parsed);
         checkIRAgainstSchema(validated, opts.schema);
-        setCachedIR(key, validated);
+        await cache.set(key, validated);
         return validated;
       } catch (err) {
         lastError = err;
@@ -93,7 +107,11 @@ export async function generateIR(opts: GenerateIROptions): Promise<GenerateIRRes
     throw new Error(
       `IR generation failed after ${MAX_RETRIES + 1} attempts: ${errMsg(lastError)}`,
     );
-  });
+  };
+
+  const ir = cache.singleFlight
+    ? await cache.singleFlight(key, work)
+    : await work();
 
   return { ir, cached: false, usage, attempts };
 }
@@ -147,7 +165,6 @@ function parseIR(text: string): unknown {
   const balanced = extractBalancedJSON(cleaned);
   if (balanced) return JSON.parse(balanced);
 
-  // Re-throw the original parse error for clarity.
   return JSON.parse(cleaned);
 }
 

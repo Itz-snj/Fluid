@@ -14,13 +14,25 @@ Static UIs assume you can enumerate user types. With 5 intent dimensions × 4 va
 
 ## The Solution
 
-Three layers:
+Three packages:
 
-1. **Schema** — developer-authored capability declaration (entities, fields, endpoints). No JSX, no CSS.
-2. **Engine** — Fluid-owned. LLM emits IR, Zod validates, cache stores per `userId`.
-3. **Renderer** — pulls IR from cache, binds live data, ships HTML.
+1. **`@fluid/core`** — schema definition + IR types + semantic validation. No runtime deps beyond Zod. The LLM never sees this; it's the spec the LLM is held to.
+2. **`@fluid/engine`** — LLM bridge. `createEngine({ apiKey })` returns an instance that owns prompt construction, the Anthropic call, the IR cache, the rate limiter, and the retry-with-feedback loop. BYOK and adapter-pluggable.
+3. **`@fluid/react`** — `FluidView` (server-safe), `fetchIR`, and `useFluidIR` (client hook).
 
 **The IR is the IP.** Sandboxed JSON. Cannot reference undeclared fields. Cannot make unauthorized API calls. Validated by Zod before storage. The boundary between LLM output and rendered components.
+
+## Repository layout
+
+```
+genUI/
+├── packages/
+│   ├── fluid-core/      → @fluid/core
+│   ├── fluid-engine/    → @fluid/engine
+│   └── fluid-react/     → @fluid/react
+└── apps/
+    └── engine/          → @fluid-app/engine (Next.js 16 showcase)
+```
 
 ## Demo Use Case
 
@@ -34,120 +46,195 @@ A SaaS task manager where a lawyer, an engineer, and a PM open the same product 
 
 Same schema. Same API. Same backend. Different UIs.
 
-## Architecture
+## Architecture at a glance
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Developer Layer                          │
-│  .fluid.ts schema (entities, fields, endpoints, mock data)      │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                         Engine Layer                             │
+│                  Consumer's Next.js process                     │
 │                                                                  │
-│  User Intent  →  Cache Check  →  LLM Provider (Anthropic)       │
-│                       ↓                    ↓                     │
-│                  Cache Hit            System Prompt              │
-│                       ↓               (cached, stable)           │
-│                  Return IR                  +                    │
-│                                        User Message              │
-│                                       (intent, volatile)         │
-│                                             ↓                    │
-│                                    Claude Opus 4.7               │
-│                                    (adaptive thinking)           │
-│                                             ↓                    │
-│                                    JSON Response                 │
-│                                             ↓                    │
-│                                    Strip Code Fences             │
-│                                             ↓                    │
-│                                    JSON.parse()                  │
-│                                             ↓                    │
-│                                    Zod Validate                  │
-│                                             ↓                    │
-│                                    Cache Store (1h TTL)          │
-│                                             ↓                    │
-│                                    Return IR                     │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Renderer Layer                            │
+│   .fluid.ts schema                                              │
+│         │                                                        │
+│         ▼                                                        │
+│   getEngine() ──▶ createEngine({                                │
+│                       apiKey,                                   │
+│                       cache?,        ← CacheAdapter             │
+│                       rateLimiter?,  ← RateLimiter              │
+│                       provider?      ← LLMProvider              │
+│                   })                                            │
+│         │                                                        │
+│         ▼                                                        │
+│   /api/generate ──▶ engine.generate({ schema, intent, userId })│
+│                          │                                       │
+│                          ▼                                       │
+│                  Anthropic (consumer's API key)                 │
+│                          │                                       │
+│                          ▼                                       │
+│                  Validated IR ──▶ JSON response                 │
 │                                                                  │
-│  FluidView  →  Recursive Render  →  Bind Data  →  SSR HTML      │
-│                                                                  │
-│  IR Node Types: Stack, Split, Grid, Kanban, List, Card,         │
-│                 Stat, Heading, Field, Badge                      │
+│   <FluidView ir data />                                         │
+│   useFluidIR({ endpoint, intent, userId })                      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for layer-by-layer detail, the full LLM flow, caching strategy, and security model.
+
 ## Project Status
 
-### ✅ Phase 1 — IR Spec + Renderer (Complete)
+### Phase 1 — IR Spec + Renderer
 
-Proved the core loop with three hardcoded IRs. Same data → three radically different UIs.
+Three hardcoded archetype IRs prove the loop. Same data → three radically different UIs. Lives in `apps/engine`.
 
-**Shipped:**
-- IR type system with recursive node structures (`src/fluid/core/ir.ts`)
-- Schema definition runtime (`src/fluid/core/schema.ts`)
-- Recursive renderer with Tailwind primitives (`src/fluid/react/render.tsx`)
-- Task + Snippet schema with mock data (`src/schemas/tasks.fluid.ts`)
-- Three archetype IRs: lawyer (split-panel), engineer (kanban), PM (dashboard)
-- Demo page with archetype switcher (`src/app/page.tsx`)
+### Phase 2 — LLM Bridge
 
-### ✅ Phase 2 — LLM Bridge (Complete)
+Live generation from freeform intent strings.
 
-Replaced hardcoded IRs with live generation from freeform intent strings.
+- Provider-agnostic `LLMProvider` interface; default `AnthropicProvider` (Opus 4.7 + adaptive thinking + `xhigh` effort)
+- System prompt builder with `cache_control` breakpoint between the stable schema chunk and the volatile intent
+- IR cache: SHA256-keyed, LRU + TTL bounded, single-flight dedup
+- Two-attempt retry loop with tagged errors (`schema-violation` / `invalid-json` / `invalid-ir`)
+- Rate limiter, AbortController plumbing, structured telemetry
 
-**Shipped:**
-- Provider-agnostic LLM interface (`src/fluid/engine/llm/provider.ts`)
-- Anthropic SDK implementation with Opus 4.7, adaptive thinking, prompt caching (`src/fluid/engine/llm/anthropic.ts`)
-- System prompt builder teaching IR grammar from schema (`src/fluid/engine/prompt.ts`)
-- In-memory cache with SHA256-based keys, 1h TTL (`src/fluid/engine/cache.ts`)
-- Generation orchestrator with retry logic (`src/fluid/engine/generate.ts`)
-- POST `/api/generate` endpoint with 120s timeout (`src/app/api/generate/route.ts`)
-- IntentBox UI component with suggestions, usage display, IR toggle (`src/components/IntentBox.tsx`)
+### Workspace restructure (current)
 
-**Key Decisions:**
-- **Adaptive thinking + `xhigh` effort**: IR generation is structure-to-structure mapping; recommended for codegen tasks
-- **Streaming**: Avoids HTTP timeout surprises, scales cheaply
-- **No structured outputs**: Recursive schemas unsupported; JSON parsing + Zod validation does the same job with retry loop
-- **Prompt caching**: Stable grammar + schema cached with `cache_control`; volatile intent in user message
-- **Provider abstraction**: Interface-based design allows future OpenAI/Gemini swap without touching engine code
+Phase 2 code reorganized into three publishable packages. Engine became BYOK + adapter-based — no env reads inside the library, no DB owned by the library. The showcase app now consumes Fluid as a library; a third-party consumer integrates the same way.
 
-### 🔜 Phase 3 — Next.js Adapter (Planned)
+### Phase 3 — Consumer demo app (queued)
 
-Production drop-in for real Next.js apps.
+A separate Next.js app outside this workspace that depends on the published Fluid packages, demonstrating end-to-end developer integration (define schema, wire `createEngine`, call `useFluidIR` from a client component, render with `FluidView`).
 
-- `<FluidProvider>` for `userId` / intent context
-- RSC-friendly cache layer with Redis
-- IR versioning + rollback
-- `useFluid()` for client-side action dispatch
-- `fluid` CLI: scaffold, validate, extract schema from existing API routes
+## Using Fluid in a Next.js app
 
-### 🔜 Phase 4 — Fluid Cloud (Stretch)
+### 1. Install
 
-Hosted intent profiles, UI versioning, analytics, archetype marketplace. Network-effect data moat.
+In a Bun workspace consuming this repo as a workspace dependency:
 
-## Setup
+```json
+{
+  "dependencies": {
+    "@fluid/core": "workspace:*",
+    "@fluid/engine": "workspace:*",
+    "@fluid/react": "workspace:*"
+  }
+}
+```
+
+(Once published, plain semver versions will work the same way.)
+
+### 2. Define a schema
+
+```ts
+// src/schemas/tasks.fluid.ts
+import { defineSchema } from "@fluid/core";
+
+export const taskSchema = defineSchema({
+  name: "tasks",
+  entities: {
+    Task: {
+      fields: {
+        id: { type: "string" },
+        title: { type: "string" },
+        status: { type: "string", values: ["todo", "doing", "done"] },
+        priority: { type: "string" },
+        assignee: { type: "string" },
+        matter: { type: "string" },
+        dueDate: { type: "date" },
+      },
+    },
+  },
+  endpoints: {
+    tasks: {
+      entity: "Task",
+      fetch: async () => MOCK_TASKS, // or your real DB query
+    },
+  },
+});
+```
+
+### 3. Wire the engine on the server
+
+```ts
+// src/lib/engine.ts
+import "server-only";
+import { createEngine, type FluidEngine } from "@fluid/engine";
+
+let cached: FluidEngine | null = null;
+export function getEngine(): FluidEngine {
+  if (cached) return cached;
+  cached = createEngine({ apiKey: process.env.ANTHROPIC_API_KEY! });
+  return cached;
+}
+```
+
+```ts
+// src/app/api/generate/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { getEngine } from "@/lib/engine";
+import { taskSchema } from "@/schemas/tasks.fluid";
+
+export async function POST(req: NextRequest) {
+  const { intent, userId } = await req.json();
+  const engine = getEngine();
+
+  const ip = req.headers.get("x-forwarded-for") ?? "anon";
+  const rl = await engine.checkRateLimit(`gen:${ip}`);
+  if (!rl.ok) return NextResponse.json({ error: "rate-limited" }, { status: 429 });
+
+  const result = await engine.generate({ schema: taskSchema, intent, userId });
+  return NextResponse.json(result);
+}
+```
+
+### 4. Render on the client
+
+```tsx
+"use client";
+import { FluidView, useFluidIR, type DataContext } from "@fluid/react";
+
+export function MyView({ data, intent, userId }: { data: DataContext; intent: string; userId?: string }) {
+  const { ir, loading, error, refetch } = useFluidIR({
+    endpoint: "/api/generate",
+    intent,
+    userId,
+  });
+  if (loading) return <Spinner />;
+  if (error || !ir) return <button onClick={() => refetch()}>Retry</button>;
+  return <FluidView ir={ir} data={data} />;
+}
+```
+
+For SSR with a pre-baked archetype IR, render `<FluidView>` directly from a server component — no fetch needed.
+
+### Swapping the in-memory defaults
+
+```ts
+import { createEngine, type CacheAdapter } from "@fluid/engine";
+
+const redisCache: CacheAdapter = {
+  async get(key)   { /* SELECT … */ },
+  async set(key, ir) { /* UPSERT … */ },
+  async singleFlight(key, fn) { /* SET NX or in-process map */ return fn(); },
+};
+
+export const engine = createEngine({
+  apiKey: process.env.ANTHROPIC_API_KEY!,
+  cache: redisCache,
+});
+```
+
+Same shape for `RateLimiter`. A custom `provider: LLMProvider` slot exists for OpenAI/Gemini.
+
+## Running the showcase app
 
 **Prerequisites:**
-- Bun 1.0+ (package manager + runtime)
+- Bun 1.0+
 - Anthropic API key
 
-**Install:**
 ```bash
 bun install
-```
-
-**Configure:**
-```bash
 export ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**Run:**
-```bash
-bun run dev
+bun run dev        # next dev on apps/engine
+bun run smoke      # validates the three archetype IRs against the schema
+bun run build      # next build
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
@@ -155,58 +242,20 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Demo Flow
 
 1. **Preset archetypes** — Click **Lawyer**, **Engineer**, or **PM** in the header. Same data reflows into three distinct layouts.
-2. **Schema inspection** — Open `src/schemas/tasks.fluid.ts` to see the single source of truth.
-3. **IR inspection** — Open `src/archetypes/lawyer.ir.ts` (or engineer/pm) to see the JSON tree.
-4. **Live generation** — Scroll to "Generate from intent". Type a freeform workflow description (or click a suggestion chip). Claude Opus 4.7 generates a fresh IR from the same schema and data.
-5. **Usage metrics** — After generation, see token counts, cache hits, and latency. Click "show IR" to inspect the JSON.
+2. **Schema inspection** — Open `apps/engine/src/schemas/tasks.fluid.ts` to see the single source of truth.
+3. **IR inspection** — Open `apps/engine/src/archetypes/lawyer.ir.ts` to see the JSON tree.
+4. **Live generation** — Scroll to "Generate from intent". Type a freeform workflow description. Claude Opus 4.7 generates a fresh IR from the same schema and data.
+5. **Usage metrics** — After generation, see token counts, cache hits, and latency. Toggle "show IR" to inspect the JSON.
 
 **The wow moment:** Toggle between archetypes. Same schema, same data, radically different UIs.
 
 **The defense:** One schema file. One API. Variants are emergent.
 
-## File Structure
-
-```
-src/
-├── fluid/
-│   ├── core/
-│   │   ├── ir.ts              # IR type system + Zod schemas
-│   │   └── schema.ts          # Schema definition runtime
-│   ├── engine/
-│   │   ├── llm/
-│   │   │   ├── provider.ts    # Provider-agnostic interface
-│   │   │   ├── anthropic.ts   # Anthropic SDK implementation
-│   │   │   └── index.ts       # Provider factory
-│   │   ├── prompt.ts          # System prompt builder
-│   │   ├── cache.ts           # In-memory cache (Redis-ready)
-│   │   └── generate.ts        # Generation orchestrator
-│   └── react/
-│       ├── data.ts            # Query runner, grouping, binding
-│       ├── render.tsx         # Recursive renderer
-│       └── FluidView.tsx      # Public component
-├── schemas/
-│   └── tasks.fluid.ts         # Task + Snippet schema + mock data
-├── archetypes/
-│   ├── lawyer.ir.ts           # Split-panel IR
-│   ├── engineer.ir.ts         # Kanban IR
-│   ├── pm.ir.ts               # Dashboard IR
-│   └── index.ts               # Archetype registry
-├── components/
-│   └── IntentBox.tsx          # Intent input + live generation UI
-└── app/
-    ├── page.tsx               # Demo page (server component)
-    ├── layout.tsx             # Root layout
-    ├── globals.css            # Tailwind + dark theme
-    └── api/
-        └── generate/
-            └── route.ts       # POST /api/generate endpoint
-```
-
 ## Key Concepts
 
 ### The IR (Intermediate Representation)
 
-Sandboxed JSON component tree. Cannot reference undeclared fields. Cannot make unauthorized API calls. Validated by Zod before storage.
+Sandboxed JSON component tree. Cannot reference undeclared fields. Cannot make unauthorized API calls. Validated by Zod, then re-checked against the schema before render.
 
 **Node types:**
 - **Layout**: `Stack`, `Split`, `Grid`
@@ -221,65 +270,30 @@ Sandboxed JSON component tree. Cannot reference undeclared fields. Cannot make u
   "schema": "tasks",
   "root": {
     "type": "split",
-    "left": {
-      "type": "list",
-      "entity": "Task",
-      "groupBy": "matter",
-      "variant": "comfortable"
-    },
-    "right": {
-      "type": "list",
-      "entity": "Snippet",
-      "filter": { "field": "pinned", "op": "eq", "value": true }
-    }
+    "left":  { "type": "list", "entity": "Task",    "groupBy": "matter" },
+    "right": { "type": "list", "entity": "Snippet", "filter": { "field": "pinned", "op": "eq", "value": true } }
   }
 }
 ```
 
-### The Schema
+### BYOK + adapters
 
-Developer-authored capability declaration. Entities, fields, endpoints. No JSX, no CSS.
+The library never reads env vars. The consumer passes the Anthropic API key explicitly to `createEngine`, and the LLM call runs inside the consumer's server process — so consumer costs and consumer rate limits, not Fluid's. In-memory cache and rate limiter ship as defaults; swap for Redis/Upstash via the published interfaces. Fluid never owns a database.
 
-**Example:**
-```typescript
-export const taskSchema = defineSchema({
-  name: "tasks",
-  entities: {
-    Task: {
-      fields: {
-        id: { type: "string" },
-        title: { type: "string" },
-        status: { type: "string" },
-        priority: { type: "string" },
-        assignee: { type: "string" },
-        matter: { type: "string" },
-        dueDate: { type: "date" },
-      },
-    },
-  },
-  endpoints: {
-    tasks: {
-      entity: "Task",
-      fetch: async () => MOCK_TASKS,
-    },
-  },
-});
-```
-
-### Prompt Caching
+### Prompt caching
 
 Stable content (IR grammar + schema) sits before the `cache_control` breakpoint. Volatile intent goes in the user message. 5-minute ephemeral cache. Verified at runtime via `usage.cache_read_input_tokens`.
 
-### Provider Abstraction
+### Provider abstraction
 
-Interface-based design. Swap Anthropic for OpenAI/Gemini by implementing `LLMProvider`. Engine code unchanged.
+`LLMProvider` is an interface. Anthropic is the default. Implement the interface and pass via `createEngine({ provider })` to swap.
 
 ## Open Risks
 
 - **Cold start** — first-time user may get a "wrong" UI. Mitigation: ship preset archetypes from community data.
 - **Debugging** — when generated UI breaks, whose fault? Mitigation: log `userId + IR version + schema version` on every render.
 - **Accessibility** — generated UIs risk inconsistent tab order, contrast, screen reader behavior. Mitigation: design system constraints in `.fluid.ts`.
-- **Security** — hallucinated IR could expose undeclared fields. Mitigation: Zod sandbox + rate-limit generation.
+- **Security** — hallucinated IR could expose undeclared fields. Mitigation: Zod sandbox + semantic check + rate-limit generation.
 - **Polish** — Linear/Notion polish comes from hundreds of designer micro-decisions. Mitigation: position as "good enough + personalized > perfect + generic."
 
 ## Technical Decisions
@@ -295,9 +309,9 @@ Interface-based design. Swap Anthropic for OpenAI/Gemini by implementing `LLMPro
 
 Recursive schemas unsupported. JSON parsing + Zod validation gives the same safety with a clean retry loop on errors.
 
-### Why in-memory cache?
+### Why no built-in database?
 
-Proof-of-concept simplicity. Redis swap is a 10-line change (same interface).
+A library that owns a database is a service. Keeping persistence behind the `CacheAdapter` / `RateLimiter` interfaces (and a future `ProfileStore`) means consumers run Fluid inside whatever stack they already have — Postgres, Redis, Upstash, in-memory for dev — without forking or hosting.
 
 ### Why Zod?
 

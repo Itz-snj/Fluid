@@ -6,7 +6,7 @@
  * goes in the user message, never here.
  */
 
-import type { FluidSchema } from "@/fluid/core";
+import type { FluidSchema } from "@fluid/core";
 
 export function buildSystemPrompt(schema: FluidSchema): string {
   return `You are Fluid, a UI generation engine. You translate a user's intent into a sandboxed JSON component tree (the IR — Intermediate Representation) that a renderer will use to build their personalized UI.
