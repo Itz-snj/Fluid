@@ -1,11 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FluidIR } from "@fluid/core";
 import { FluidView, type DataContext } from "@fluid/react";
 
 interface IntentBoxProps {
   data: DataContext;
+}
+
+interface IntentProfile {
+  userId: string;
+  history: { intent: string; at: number }[];
+  updatedAt: number;
 }
 
 interface GenerateResponse {
@@ -19,6 +25,7 @@ interface GenerateResponse {
   } | null;
   latencyMs?: number;
   attempts?: number;
+  profile?: IntentProfile | null;
   error?: string;
   detail?: string;
 }
@@ -29,11 +36,29 @@ const SUGGESTIONS = [
   "I'm an exec — just give me a 4-tile summary of work in flight, then a single timeline of what's due this week.",
 ];
 
+const USER_ID_KEY = "fluid.demo.userId";
+
+function loadOrCreateUserId(): string {
+  if (typeof window === "undefined") return "anon";
+  const existing = window.localStorage.getItem(USER_ID_KEY);
+  if (existing) return existing;
+  const fresh = `u_${Math.random().toString(36).slice(2, 10)}`;
+  window.localStorage.setItem(USER_ID_KEY, fresh);
+  return fresh;
+}
+
 export function IntentBox({ data }: IntentBoxProps) {
   const [intent, setIntent] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [showIR, setShowIR] = useState(false);
+  const [learn, setLearn] = useState(true);
+  const [userId, setUserId] = useState<string>("anon");
+  const [profile, setProfile] = useState<IntentProfile | null>(null);
+
+  useEffect(() => {
+    setUserId(loadOrCreateUserId());
+  }, []);
 
   async function generate(text: string) {
     if (!text.trim() || loading) return;
@@ -43,15 +68,29 @@ export function IntentBox({ data }: IntentBoxProps) {
       const resp = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ intent: text }),
+        body: JSON.stringify({
+          intent: text,
+          learn,
+          userId: learn ? userId : undefined,
+        }),
       });
       const body = (await resp.json()) as GenerateResponse;
       setResult(body);
+      if (body.profile) setProfile(body.profile);
     } catch (err) {
       setResult({ error: err instanceof Error ? err.message : String(err) });
     } finally {
       setLoading(false);
     }
+  }
+
+  function forgetMe() {
+    if (typeof window !== "undefined") {
+      window.localStorage.removeItem(USER_ID_KEY);
+    }
+    setUserId(loadOrCreateUserId());
+    setProfile(null);
+    setResult(null);
   }
 
   return (
@@ -84,6 +123,29 @@ export function IntentBox({ data }: IntentBoxProps) {
             {loading ? "Generating…" : "Generate UI"}
           </button>
         </div>
+
+        <div className="flex items-center justify-between text-xs text-zinc-500">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={learn}
+              onChange={(e) => setLearn(e.target.checked)}
+              className="accent-emerald-500"
+            />
+            <span>
+              Remember my preferences{" "}
+              <span className="text-zinc-600">(learn-mode · userId {userId})</span>
+            </span>
+          </label>
+          <button
+            type="button"
+            onClick={forgetMe}
+            className="text-zinc-500 hover:text-rose-300 underline underline-offset-2 decoration-zinc-700"
+          >
+            forget me
+          </button>
+        </div>
+
         <div className="flex flex-wrap gap-2">
           {SUGGESTIONS.map((s) => (
             <button
@@ -176,6 +238,21 @@ export function IntentBox({ data }: IntentBoxProps) {
             <FluidView ir={result.ir} data={data} />
           </div>
         </>
+      )}
+
+      {profile && profile.history.length > 0 && (
+        <div className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-4 text-xs text-zinc-400">
+          <div className="uppercase tracking-wider text-zinc-500 mb-2">
+            What Fluid remembers about you ({profile.history.length})
+          </div>
+          <ol className="space-y-1 list-decimal list-inside marker:text-zinc-600">
+            {profile.history.map((h, i) => (
+              <li key={`${h.at}-${i}`} className="truncate">
+                <span className="text-zinc-300">{h.intent}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
       )}
     </div>
   );

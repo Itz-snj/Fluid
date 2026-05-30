@@ -2,7 +2,7 @@
 
 Detailed system architecture, flow diagrams, and operational guide.
 
-> **Status:** Phase 1 + Phase 2 complete and hardened. The codebase is now a Bun workspace split into three publishable packages (`@fluid/core`, `@fluid/engine`, `@fluid/react`) plus an in-tree showcase app at `apps/engine`. Phase 3 (separate consumer demo app) is queued.
+> **Status:** Phase 1 + Phase 2 complete and hardened. Workspace split into three packages (`@fluid/core`, `@fluid/engine`, `@fluid/react`) plus an in-tree showcase app at `apps/engine`. The learn loop (`engine.refine` + `ProfileStore`) is wired with an in-memory default — swap for Redis/Postgres in prod. Phase 3 (separate consumer demo app) is queued.
 
 ---
 
@@ -163,8 +163,11 @@ HTML                             ← what's on the wire
 │  4. Set up AbortController           │
 │     ↳ 90s server timeout             │
 │     ↳ client disconnect → abort      │
-│  5. engine.generate({ schema, intent,│
-│                       userId, signal })│
+│  5. learn === true                   │
+│     ?  engine.refine({               │
+│         schema, intent, userId, ...})│
+│     :  engine.generate({             │
+│         schema, intent, userId, ...})│
 └──────┬───────────────────────────────┘
        │
        ▼
@@ -313,11 +316,12 @@ HTML                             ← what's on the wire
 | `src/schema.ts` | `@fluid/core` | `defineSchema()` runtime, entity/endpoint types | No |
 | `src/validate.ts` | `@fluid/core` | `checkIRAgainstSchema` (semantic sandbox) + IR limits (depth, node count) | No |
 | `src/adapters.ts` | `@fluid/engine` | `CacheAdapter` / `RateLimiter` interfaces | No |
-| `src/engine.ts` | `@fluid/engine` | `createEngine({ apiKey, cache?, rateLimiter?, provider? })` factory | No |
+| `src/engine.ts` | `@fluid/engine` | `createEngine({ apiKey, cache?, rateLimiter?, profileStore?, provider? })` factory; exposes `generate()` (stateless) and `refine()` (learns from history) | No |
 | `src/prompt.ts` | `@fluid/engine` | Build system prompt from schema | No (produces LLM input) |
 | `src/llm/provider.ts` | `@fluid/engine` | Provider-agnostic interface (with `AbortSignal`) | No |
 | `src/llm/anthropic.ts` | `@fluid/engine` | Anthropic SDK calls — streaming, prompt caching, abort. Constructor takes `apiKey` | Sends/receives |
 | `src/cache.ts` | `@fluid/engine` | `intentKey(schema, intent, userId?)` + `createMemoryCache()` (LRU + TTL + single-flight) | No |
+| `src/profile.ts` | `@fluid/engine` | `createMemoryProfileStore()` — per-user `IntentProfile` (bounded recency-ordered history) | No |
 | `src/rate-limit.ts` | `@fluid/engine` | `createMemoryRateLimiter()` — sliding-window in-memory limiter, no module-level state | No |
 | `src/generate.ts` | `@fluid/engine` | Orchestrate cache → LLM → parse → validate → retry. Pure function over injected `{ provider, cache }` | Receives + validates |
 | `src/data.ts` | `@fluid/react` | `runQuery`, `groupRows`, `resolveBinding` (type-aware compare) | No |
@@ -438,37 +442,102 @@ Whitespace and case differences collapse to the same key. `"  Show TASKS "` == `
 
 ---
 
-## Where intent profiles live (and the per-user gap)
+## The learn loop — `engine.refine` and `ProfileStore`
 
-Today the engine is **stateless per request**. The intent string carries everything. `userId` plumbs through the API → engine → cache key, but nothing is persisted.
+Two generation paths now coexist in the engine:
 
-**Already wired:**
-
-| Concept | Where it lives | Notes |
+| Method | State | When to use |
 |---|---|---|
-| `userId` on the request | `/api/generate` body | Optional; client decides |
-| Cache key including userId | `ir:{schema}:{userId}:{intentHash}` | Engine-side; opt-in via `engine.generate({ userId })` |
+| `engine.generate({ schema, intent, userId? })` | Stateless. Reads no profile, writes no profile. | Anonymous traffic, server-rendered first paint, "regenerate" buttons, anywhere learning would be noise. |
+| `engine.refine({ schema, userId, intent })` | Reads and writes the user's `IntentProfile`. | The "Fluid learns who you are" path. Requires a `userId`. |
 
-**Not implemented yet (Phase 3):**
+### What an IntentProfile is
 
-| Concept | Where it will live | Notes |
-|---|---|---|
-| Persisted intent profile | Consumer's DB (Postgres/Convex/Supabase) via a `ProfileStore` adapter | Today: nowhere |
-| "Refine my UI" feedback loop | New endpoint + ProfileStore writes | Today: regenerate-only |
-| Profile-aware prompt | `buildSystemPrompt(schema, profile?)` | Today: schema-only |
+Deliberately small — just a bounded recency-ordered list of past intents:
 
-The cleanest integration point is *inside* the consumer's `/api/generate`, before `engine.generate`:
+```ts
+interface IntentProfile {
+  userId: string;
+  history: { intent: string; at: number }[]; // oldest → newest, capped (default 10)
+  updatedAt: number;
+}
+```
+
+No "consolidated" / "summarized" form is stored. Consolidation happens at prompt-construction time, so swapping the merge strategy doesn't require a data migration.
+
+### The refine flow
 
 ```
-client → /api/generate { userId, intent }
+client → POST /api/generate { userId, intent, learn: true }
          ↓
-         API: 1. resolve userId → load intent profile (ProfileStore.get)
-              2. merge profile + new intent
-              3. write merged profile back (ProfileStore.set)
-              4. call engine.generate({ schema, intent: merged, userId })
+         engine.refine({ schema, userId, intent })
+           ├── 1. profileStore.get(userId)  → existing (or empty)
+           │
+           ├── 2. expandedIntent = buildExpandedIntent(history, intent)
+           │     // a multi-line string:
+           │     //   Prior preferences for this user (oldest → newest):
+           │     //     1. kanban by status
+           │     //     2. denser cards
+           │     //   Current intent (takes priority): show overdue first
+           │
+           ├── 3. generateIR({ intent: expandedIntent, userId, ... })
+           │      ↳ key = ir:{schema}:{userId}:sha256(expandedIntent)[:16]
+           │      ↳ cache MISS almost always (key changes when history grows)
+           │      ↳ provider call, Zod + semantic check, retry once on failure
+           │
+           ├── 4. nextHistory = [...history, { intent, at: Date.now() }].slice(-N)
+           │
+           ├── 5. profileStore.set(userId, { userId, history: nextHistory, updatedAt: ... })
+           │
+           └── return { ir, profile: nextProfile, cached, usage, attempts, latencyMs }
 ```
 
-Same shape as the existing adapter pattern — `ProfileStore` would join `CacheAdapter` and `RateLimiter` as a third pluggable interface.
+### Why prompt-side merge rather than a second LLM call
+
+We could have used Claude to consolidate `(history, new intent) → coherent summary` and then generated IR from the summary. The current design rejects that:
+
+- **Cost.** Two LLM calls per refine, not one.
+- **Latency.** Doubles user-perceived wait.
+- **Cache thrash.** A separate merge would emit non-deterministic prose, so the IR cache would never hit. Putting history straight into the prompt makes the cache key deterministic in `(userId, history, intent)`.
+
+The model already has the schema; layering recent preferences into the user message is enough to bias the output.
+
+### Cache key behavior on the refine path
+
+Important and counterintuitive: **refine almost always MISSes the IR cache.** Each new intent grows the history, which changes the expanded intent string, which changes the hash. Concretely, for `userId = u_abc`:
+
+| # | New intent | History before this call | Cache key changes vs. previous |
+|---|---|---|---|
+| 1 | "kanban" | `[]` | first ever — MISS |
+| 2 | "denser cards" | `["kanban"]` | new — MISS |
+| 3 | "denser cards" | `["kanban", "denser cards"]` | history grew → new key → MISS |
+| 4 | "denser cards" | `["kanban", "denser cards", "denser cards"]` | history grew again → MISS |
+
+The stateless `generate` path is still cache-warm — repeat `(schema, intent)` always hits. Refine pays a full Anthropic call per submission. That's the cost of learning. Mitigations: Anthropic's prompt cache still covers the schema prefix for 5 min (cheap input tokens), history is bounded so prompts don't blow up, and `learn` is per-request so consumers opt in.
+
+### Where the profile actually lives
+
+Same adapter story as the IR cache and rate limiter:
+
+| Default | Notes |
+|---|---|
+| `createMemoryProfileStore({ maxUsers })` | In-process `Map`. Dies on restart. Fine for dev / demo / single-instance prod. |
+| `ProfileStore` interface | `{ get(userId), set(userId, profile), delete?(userId) }`. Implement against Postgres / Redis / Upstash / Convex. Pass to `createEngine({ profileStore })`. |
+
+Fluid never owns the DB — same principle as `CacheAdapter`. The consumer's process holds the profile store; the consumer's stack provides the persistence.
+
+### Server-load tradeoffs
+
+| Cost | Generate | Refine |
+|---|---|---|
+| Cache adapter `get` | 1 (often HIT) | 1 (usually MISS) |
+| Cache adapter `set` | 0 or 1 | 1 |
+| Profile adapter `get` | 0 | 1 |
+| Profile adapter `set` | 0 | 1 |
+| LLM calls | 0 on HIT, 1 on MISS | ~1 per call |
+| Anthropic prompt cache savings | Yes (5 min) | Yes (5 min) |
+
+In-memory adapter ops are microseconds; the real cost is the increased LLM call rate. For a hackathon demo this is fine; for prod you tune `maxHistoryPerUser` down (3-5 is often enough) and/or accept the cost as the price of personalization.
 
 ---
 
@@ -615,9 +684,9 @@ In production, the *content* of these three files is demo-flavored. The *role* (
 |---|---|---|
 | App data (Task, Snippet) | Showcase: hardcoded arrays in `tasks.fluid.ts`. Real consumers: their own DB, exposed via `endpoint.fetch()` | `@fluid/core` never touches this |
 | Generated IRs | `CacheAdapter` — default in-memory, swap for Redis | Consumer picks |
-| Intent profiles per user | Future `ProfileStore` adapter — not implemented | Consumer picks |
+| Intent profiles per user | `ProfileStore` — default in-memory, swap for Postgres/Redis/Upstash | Consumer picks |
 | Rate-limit state | `RateLimiter` — default in-memory, swap for Redis | Consumer picks |
-| IR version history | Doesn't exist | Future ProfileStore concern |
+| IR version history | Not stored. The IR for an `(intent, history)` pair is reproducible by calling refine again | Could add as a separate adapter later |
 
 **Important distinction:** Fluid never owns the developer's application data. Tasks live in the developer's DB. Any Fluid-flavored persistence (IR cache, intent profiles) is a small metadata store the developer also owns, plugged in via adapter. The `endpoint.fetch()` pattern is the bridge for app data; `CacheAdapter` / `RateLimiter` / future `ProfileStore` are the bridges for engine state.
 
@@ -647,3 +716,5 @@ In production, the *content* of these three files is demo-flavored. The *role* (
 - **Renderer** — Recursive React component tree builder from IR.
 - **Adapter** — A pluggable backing store (`CacheAdapter`, `RateLimiter`) the consumer supplies to `createEngine`. Defaults are in-memory; production swaps for Redis/Upstash.
 - **BYOK** — Bring Your Own Key. The consumer's Anthropic key, passed explicitly to `createEngine({ apiKey })`. The library never reads env vars.
+- **IntentProfile** — Per-user record holding a bounded list of past intents. Written by `engine.refine`, read on the next refine to bias the LLM toward the user's prior preferences.
+- **Generate vs. refine** — Two engine methods. `generate` is stateless and cache-warm. `refine` reads + writes the profile and pays for personalization with reduced cache hit rate.

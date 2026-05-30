@@ -17,8 +17,13 @@ Static UIs assume you can enumerate user types. With 5 intent dimensions × 4 va
 Three packages:
 
 1. **`@fluid/core`** — schema definition + IR types + semantic validation. No runtime deps beyond Zod. The LLM never sees this; it's the spec the LLM is held to.
-2. **`@fluid/engine`** — LLM bridge. `createEngine({ apiKey })` returns an instance that owns prompt construction, the Anthropic call, the IR cache, the rate limiter, and the retry-with-feedback loop. BYOK and adapter-pluggable.
+2. **`@fluid/engine`** — LLM bridge. `createEngine({ apiKey })` returns an instance that owns prompt construction, the Anthropic call, the IR cache, the rate limiter, the intent-profile store, and the retry-with-feedback loop. BYOK and adapter-pluggable.
 3. **`@fluid/react`** — `FluidView` (server-safe), `fetchIR`, and `useFluidIR` (client hook).
+
+Two generation paths:
+
+- **`engine.generate(...)`** — stateless single-shot. Cache-warm. Anonymous traffic, server-rendered first paint, "regenerate" buttons.
+- **`engine.refine(...)`** — learning path. Reads the user's `IntentProfile`, expands the prompt with recent history, writes the new intent back. This is the "Fluid learns who you are" loop.
 
 **The IR is the IP.** Sandboxed JSON. Cannot reference undeclared fields. Cannot make unauthorized API calls. Validated by Zod before storage. The boundary between LLM output and rendered components.
 
@@ -94,9 +99,13 @@ Live generation from freeform intent strings.
 - Two-attempt retry loop with tagged errors (`schema-violation` / `invalid-json` / `invalid-ir`)
 - Rate limiter, AbortController plumbing, structured telemetry
 
-### Workspace restructure (current)
+### Workspace restructure
 
 Phase 2 code reorganized into three publishable packages. Engine became BYOK + adapter-based — no env reads inside the library, no DB owned by the library. The showcase app now consumes Fluid as a library; a third-party consumer integrates the same way.
+
+### Learn loop (current)
+
+`engine.refine` + `ProfileStore` are in. The showcase app exposes a "Remember my preferences" toggle that persists a stable `userId` in localStorage and posts `learn: true`; the API surface returns the updated `IntentProfile` so the UI can render "what Fluid remembers about you." Default `ProfileStore` is in-memory; swap for Redis/Postgres via the adapter interface. See [ARCHITECTURE.md § The learn loop](./ARCHITECTURE.md#the-learn-loop--enginerefine-and-profilestore) for the prompt-expansion strategy, cache-key implications, and server-load tradeoffs.
 
 ### Phase 3 — Consumer demo app (queued)
 
@@ -172,14 +181,20 @@ import { getEngine } from "@/lib/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
 
 export async function POST(req: NextRequest) {
-  const { intent, userId } = await req.json();
+  const { intent, userId, learn } = await req.json();
   const engine = getEngine();
 
   const ip = req.headers.get("x-forwarded-for") ?? "anon";
   const rl = await engine.checkRateLimit(`gen:${ip}`);
   if (!rl.ok) return NextResponse.json({ error: "rate-limited" }, { status: 429 });
 
-  const result = await engine.generate({ schema: taskSchema, intent, userId });
+  // learn=true → engine.refine: reads + writes the user's IntentProfile,
+  // expands the prompt with recent history, returns the updated profile.
+  // learn=false → engine.generate: stateless, cache-warm.
+  const result = learn
+    ? await engine.refine({ schema: taskSchema, intent, userId })
+    : await engine.generate({ schema: taskSchema, intent, userId });
+
   return NextResponse.json(result);
 }
 ```
@@ -207,21 +222,32 @@ For SSR with a pre-baked archetype IR, render `<FluidView>` directly from a serv
 ### Swapping the in-memory defaults
 
 ```ts
-import { createEngine, type CacheAdapter } from "@fluid/engine";
+import {
+  createEngine,
+  type CacheAdapter,
+  type ProfileStore,
+} from "@fluid/engine";
 
 const redisCache: CacheAdapter = {
-  async get(key)   { /* SELECT … */ },
-  async set(key, ir) { /* UPSERT … */ },
+  async get(key)            { /* SELECT … */ },
+  async set(key, ir)        { /* UPSERT … */ },
   async singleFlight(key, fn) { /* SET NX or in-process map */ return fn(); },
+};
+
+const pgProfileStore: ProfileStore = {
+  async get(userId)              { /* SELECT intent_profile WHERE user_id = $1 */ },
+  async set(userId, profile)     { /* INSERT … ON CONFLICT DO UPDATE */ },
+  async delete(userId)           { /* DELETE FROM intent_profile WHERE user_id = $1 */ },
 };
 
 export const engine = createEngine({
   apiKey: process.env.ANTHROPIC_API_KEY!,
   cache: redisCache,
+  profileStore: pgProfileStore,
 });
 ```
 
-Same shape for `RateLimiter`. A custom `provider: LLMProvider` slot exists for OpenAI/Gemini.
+Same shape for `RateLimiter`. A custom `provider: LLMProvider` slot exists for OpenAI/Gemini. Fluid never owns the database — the consumer's stack does.
 
 ## Running the showcase app
 
@@ -278,7 +304,11 @@ Sandboxed JSON component tree. Cannot reference undeclared fields. Cannot make u
 
 ### BYOK + adapters
 
-The library never reads env vars. The consumer passes the Anthropic API key explicitly to `createEngine`, and the LLM call runs inside the consumer's server process — so consumer costs and consumer rate limits, not Fluid's. In-memory cache and rate limiter ship as defaults; swap for Redis/Upstash via the published interfaces. Fluid never owns a database.
+The library never reads env vars. The consumer passes the Anthropic API key explicitly to `createEngine`, and the LLM call runs inside the consumer's server process — so consumer costs and consumer rate limits, not Fluid's. In-memory cache, rate limiter, and profile store ship as defaults; swap for Redis/Postgres/Upstash via the published interfaces. Fluid never owns a database.
+
+### The learn loop in one paragraph
+
+`engine.refine({ userId, intent })` loads the user's `IntentProfile` (a bounded list of past intents), builds an "expanded intent" string that lists prior preferences with the new intent at the bottom marked as priority, hands that to the standard IR generation path, then writes the new intent into the history. The merge is prompt-side, not LLM-side — one round trip, deterministic cache key. History is capped (default 10) so prompts stay bounded. The IR cache key reflects the full expanded intent, so refine almost always pays a full LLM call; this is the explicit cost of personalization, mitigated by Anthropic's prompt cache covering the (much larger) schema prefix.
 
 ### Prompt caching
 

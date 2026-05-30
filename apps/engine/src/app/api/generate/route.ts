@@ -9,11 +9,18 @@ export const maxDuration = 120;
 
 const SERVER_TIMEOUT_MS = 90_000;
 
-const BodySchema = z.object({
-  intent: z.string().min(1, "intent must be non-empty").max(2000, "intent too long"),
-  bypassCache: z.boolean().optional(),
-  userId: z.string().min(1).max(128).optional(),
-});
+const BodySchema = z
+  .object({
+    intent: z.string().min(1, "intent must be non-empty").max(2000, "intent too long"),
+    bypassCache: z.boolean().optional(),
+    userId: z.string().min(1).max(128).optional(),
+    /** When true, run the learning loop (engine.refine). Requires userId. */
+    learn: z.boolean().optional(),
+  })
+  .refine((b) => !b.learn || !!b.userId, {
+    message: "learn=true requires a userId",
+    path: ["learn"],
+  });
 
 export async function POST(req: NextRequest) {
   const started = Date.now();
@@ -54,7 +61,7 @@ export async function POST(req: NextRequest) {
       { status: 400 },
     );
   }
-  const { intent, bypassCache, userId } = parsed.data;
+  const { intent, bypassCache, userId, learn } = parsed.data;
 
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), SERVER_TIMEOUT_MS);
@@ -62,22 +69,37 @@ export async function POST(req: NextRequest) {
 
   const key = intentKey(taskSchema.name, intent, userId);
   try {
-    const result = await engine.generate({
-      schema: taskSchema,
-      intent,
-      userId,
-      bypassCache: bypassCache === true,
-      signal: ac.signal,
-    });
+    const refined = learn
+      ? await engine.refine({
+          schema: taskSchema,
+          intent,
+          userId: userId!,
+          bypassCache: bypassCache === true,
+          signal: ac.signal,
+        })
+      : null;
+    const result =
+      refined ??
+      (await engine.generate({
+        schema: taskSchema,
+        intent,
+        userId,
+        bypassCache: bypassCache === true,
+        signal: ac.signal,
+      }));
+
     const latencyMs = Date.now() - started;
+    const profile = refined?.profile ?? null;
     logGeneration({
       ok: true,
       ip,
       key,
+      learn: !!learn,
       cached: result.cached,
       attempts: result.attempts,
       latencyMs,
       usage: result.usage,
+      historyLen: profile?.history.length,
     });
     return NextResponse.json({
       ir: result.ir,
@@ -85,6 +107,7 @@ export async function POST(req: NextRequest) {
       usage: result.usage,
       latencyMs,
       attempts: result.attempts,
+      profile,
     });
   } catch (err) {
     const latencyMs = Date.now() - started;
@@ -119,8 +142,10 @@ interface GenLog {
   ip: string;
   key: string;
   latencyMs: number;
+  learn?: boolean;
   cached?: boolean;
   attempts?: number;
+  historyLen?: number;
   usage?: {
     inputTokens: number;
     outputTokens: number;

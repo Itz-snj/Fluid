@@ -4,6 +4,8 @@ export { createEngine } from "./engine";
 export type {
   CreateEngineOptions,
   EngineGenerateOptions,
+  EngineRefineOptions,
+  EngineRefineResult,
   FluidEngine,
 } from "./engine";
 
@@ -17,10 +19,16 @@ export type { MemoryCacheOptions } from "./cache";
 export { createMemoryRateLimiter } from "./rate-limit";
 export type { MemoryRateLimitOptions } from "./rate-limit";
 
+export { createMemoryProfileStore } from "./profile";
+export type { MemoryProfileStoreOptions } from "./profile";
+
 export type {
   CacheAdapter,
   RateLimiter,
   RateLimitDecision,
+  ProfileStore,
+  IntentProfile,
+  IntentHistoryEntry,
 } from "./adapters";
 
 export {

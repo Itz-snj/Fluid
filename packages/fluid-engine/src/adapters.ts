@@ -29,3 +29,39 @@ export interface RateLimitDecision {
 export interface RateLimiter {
   check(key: string): Promise<RateLimitDecision> | RateLimitDecision;
 }
+
+/**
+ * One entry in a user's intent history.
+ *
+ * `intent` is stored as the user typed it (after trim). We DON'T store the
+ * normalized form — humans reading their own history want to see what they
+ * actually said.
+ */
+export interface IntentHistoryEntry {
+  intent: string;
+  /** Epoch ms. */
+  at: number;
+}
+
+/**
+ * The "what Fluid has learned about this user" record.
+ *
+ * Kept deliberately small: a bounded recency-ordered list of past intents.
+ * The merge that turns history into a "consolidated preference" happens at
+ * prompt-construction time (see engine.refine), not in storage — so swapping
+ * the merge strategy doesn't require a data migration.
+ */
+export interface IntentProfile {
+  userId: string;
+  /** Oldest → newest. Capped (engine bounds the length on write). */
+  history: IntentHistoryEntry[];
+  /** Epoch ms of the last refine() write. */
+  updatedAt: number;
+}
+
+export interface ProfileStore {
+  get(userId: string): Promise<IntentProfile | null> | IntentProfile | null;
+  set(userId: string, profile: IntentProfile): Promise<void> | void;
+  /** Optional — useful for "forget me" flows. */
+  delete?(userId: string): Promise<void> | void;
+}
