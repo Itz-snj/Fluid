@@ -18,3 +18,14 @@ export type { UseFluidTelemetryOptions } from "./useFluidTelemetry";
 export { useMutations } from "./useMutations";
 export type { UseMutationsOptions } from "./useMutations";
 
+export { FluidChat } from "./FluidChat";
+export type { FluidChatProps } from "./FluidChat";
+
+export { useFluidChat } from "./useFluidChat";
+export type {
+  UseFluidChatOptions,
+  UseFluidChatReturn,
+  ChatMessage as FluidChatMessage,
+  SuggestionItem as FluidSuggestionItem,
+  SnapshotMeta as FluidSnapshotMeta,
+} from "./useFluidChat";

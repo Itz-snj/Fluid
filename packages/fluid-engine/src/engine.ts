@@ -1,4 +1,4 @@
-import type { FluidSchema } from "@fluid/core";
+import type { FluidSchema, FluidIR } from "@fluid/core";
 import type {
   CacheAdapter,
   ContextEnricher,
@@ -22,6 +22,12 @@ import {
   type GenerateIRResult,
   generateIR,
 } from "./generate";
+import {
+  type PatchIROptions,
+  type PatchIRResult,
+  patchIR,
+} from "./patch";
+import type { PatchChatMessage } from "./patch-prompt";
 
 export interface CreateEngineOptions {
   /**
@@ -84,6 +90,21 @@ export interface EngineRefineResult extends GenerateIRResult {
   profile: IntentProfile;
 }
 
+export interface EnginePatchOptions {
+  schema: FluidSchema;
+  userId: string;
+  /** The IR the user is currently seeing. */
+  currentIR: FluidIR;
+  /** The user's change request in natural language. */
+  message: string;
+  /** Recent chat history for conversational context. */
+  chatHistory?: PatchChatMessage[];
+  signal?: AbortSignal;
+}
+
+export type { PatchIRResult } from "./patch";
+export type { PatchChatMessage } from "./patch-prompt";
+
 export interface FluidEngine {
   /**
    * One-shot: generate IR from an intent. Stateless — does not read or write
@@ -102,6 +123,13 @@ export interface FluidEngine {
    * different histories typing the same new intent get different UIs.
    */
   refine(opts: EngineRefineOptions): Promise<EngineRefineResult>;
+
+  /**
+   * Conversational patch. Takes the user's current IR + a change request,
+   * sends both to the LLM with a patch-oriented prompt, and returns
+   * a modified IR or a rejection with explanation.
+   */
+  patch(opts: EnginePatchOptions): Promise<PatchIRResult>;
 
   checkRateLimit(key: string): Promise<RateLimitDecision> | RateLimitDecision;
 
@@ -184,6 +212,19 @@ export function createEngine(opts: CreateEngineOptions): FluidEngine {
 
     generate(genOpts) {
       return generateIR(genOpts, { provider, cache });
+    },
+
+    patch(patchOpts) {
+      return patchIR(
+        {
+          schema: patchOpts.schema,
+          currentIR: patchOpts.currentIR,
+          message: patchOpts.message,
+          chatHistory: patchOpts.chatHistory,
+          signal: patchOpts.signal,
+        },
+        { provider },
+      );
     },
 
     checkRateLimit(key) {

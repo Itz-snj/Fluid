@@ -8,3 +8,10 @@
 export { createContextEnricher } from "./context-enricher";
 export { createRefreshPolicy } from "./refresh-policy";
 export type { RefreshPolicyOptions } from "./refresh-policy";
+
+export { generateSuggestions } from "./suggestion-generator";
+export type {
+  SuggestionCandidate,
+  UsageSummaryInput,
+  SuggestionGeneratorOptions,
+} from "./suggestion-generator";

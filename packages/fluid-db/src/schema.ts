@@ -4,6 +4,7 @@ import {
   jsonb,
   timestamp,
   bigserial,
+  serial,
   boolean,
   integer,
   primaryKey,
@@ -20,6 +21,9 @@ import {
  *   fluid_generated_irs  — versioned IR storage per user (replaces in-memory cache)
  *   fluid_usage_events   — raw interaction telemetry (click, view, scroll …)
  *   fluid_refresh_queue  — pending auto-regeneration jobs
+ *   fluid_ir_snapshots   — immutable version chain for rollback
+ *   fluid_chat_messages  — chatbot conversation log
+ *   fluid_suggestions    — proactive telemetry-driven suggestions
  */
 
 // ────────────────────────────────────────────────────────────
@@ -45,12 +49,18 @@ export const userProfiles = pgTable("fluid_user_profiles", {
   // Which IR the user is currently seeing
   activeIrId: text("active_ir_id"),
 
+  // ── Chatbot additions ──
+  /** When true, the system generates proactive suggestions from telemetry. */
+  autoAdapt: boolean("auto_adapt").notNull().default(true),
+  /** FK to fluid_ir_snapshots — the snapshot the user is currently viewing. */
+  activeSnapshotId: text("active_snapshot_id"),
+
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ────────────────────────────────────────────────────────────
-// 2. Generated IRs
+// 2. Generated IRs (cache layer — unchanged)
 // ────────────────────────────────────────────────────────────
 export const generatedIrs = pgTable(
   "fluid_generated_irs",
@@ -126,3 +136,93 @@ export const refreshQueue = pgTable(
     primaryKey({ columns: [t.userId, t.schemaName] }),
   ],
 );
+
+// ────────────────────────────────────────────────────────────
+// 5. IR Snapshots — immutable version chain for rollback
+// ────────────────────────────────────────────────────────────
+export const irSnapshots = pgTable(
+  "fluid_ir_snapshots",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userProfiles.userId, { onDelete: "cascade" }),
+    schemaName: text("schema_name").notNull(),
+
+    /** Auto-incrementing version per user (for display: "v3"). */
+    version: integer("version").notNull(),
+    /** The complete IR JSON at this version. */
+    irJson: jsonb("ir_json").notNull(),
+    /** FK to the snapshot this was derived from. Null for the first generate. */
+    parentId: text("parent_id"),
+
+    /** What created this snapshot. */
+    source: text("source").notNull(),  // "generate" | "patch" | "revert" | "suggestion"
+    /** Human-readable description of the change. */
+    changeDesc: text("change_desc"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_snapshots_user").on(t.userId, t.schemaName, t.version),
+  ],
+);
+
+// ────────────────────────────────────────────────────────────
+// 6. Chat messages — conversation log for the chatbot
+// ────────────────────────────────────────────────────────────
+export const chatMessages = pgTable(
+  "fluid_chat_messages",
+  {
+    id: bigserial("id", { mode: "number" }).primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userProfiles.userId, { onDelete: "cascade" }),
+    schemaName: text("schema_name").notNull(),
+
+    /** "user" | "assistant" | "suggestion" */
+    role: text("role").notNull(),
+    content: text("content").notNull(),
+
+    /** Links to the snapshot this message produced (null for user messages). */
+    snapshotId: text("snapshot_id"),
+    /** Whether the user accepted this change (for suggestion/assistant messages). */
+    wasApplied: boolean("was_applied").notNull().default(false),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("idx_chat_user").on(t.userId, t.schemaName, t.createdAt),
+  ],
+);
+
+// ────────────────────────────────────────────────────────────
+// 7. Suggestions — proactive telemetry-driven recommendations
+// ────────────────────────────────────────────────────────────
+export const suggestions = pgTable(
+  "fluid_suggestions",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => userProfiles.userId, { onDelete: "cascade" }),
+    schemaName: text("schema_name").notNull(),
+
+    /** "remove_cold" | "promote_hot" | "layout_change" | "density_change" */
+    type: text("type").notNull(),
+    /** Human-readable message shown in the chat widget. */
+    message: text("message").notNull(),
+    /** The intent to feed into engine.patch() if the user accepts. */
+    proposedIntent: text("proposed_intent").notNull(),
+
+    /** "pending" | "accepted" | "dismissed" */
+    status: text("status").notNull().default("pending"),
+
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("idx_suggestions_user").on(t.userId, t.status),
+  ],
+);
+

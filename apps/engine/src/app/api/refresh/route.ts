@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEngine, getDb } from "@/lib/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
-import { dequeueRefreshJobs, completeRefreshJob } from "@fluid/db";
+import { dequeueRefreshJobs, completeRefreshJob, insertSuggestion } from "@fluid/db";
 import type { IntentProfile, UsageSummary } from "@fluid/engine";
+import { generateSuggestions } from "@fluid/telemetry";
 
 export const runtime = "nodejs";
 // Allow up to 5 minutes for the refresh worker to complete its batch.
@@ -88,6 +89,25 @@ export async function POST(req: NextRequest) {
       });
 
       await completeRefreshJob(db, job.userId, job.schemaName);
+
+      // 4. Generate proactive suggestions from usage patterns.
+      if (usageSummary && usageSummary.totalEvents >= 10) {
+        const candidates = generateSuggestions(
+          usageSummary,
+          result.ir.archetype,     // current layout
+          undefined,                // current density — not tracked yet
+        );
+        for (const c of candidates) {
+          await insertSuggestion(db, {
+            userId: job.userId,
+            schemaName: job.schemaName,
+            type: c.type,
+            message: c.message,
+            proposedIntent: c.proposedIntent,
+          });
+        }
+      }
+
       results.push({ userId: job.userId, ok: true, cached: result.cached });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

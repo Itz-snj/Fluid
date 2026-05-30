@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { FluidIR } from "@fluid/core";
 import {
   FluidView,
+  FluidChat,
   type DataContext,
   useFluidTelemetry,
   useMutations,
@@ -31,6 +32,7 @@ interface GenerateResponse {
   latencyMs?: number;
   attempts?: number;
   profile?: IntentProfile | null;
+  snapshotId?: string;
   error?: string;
   detail?: string;
 }
@@ -84,6 +86,7 @@ export function IntentBox({ data }: IntentBoxProps) {
   const [currentUserName, setCurrentUserName] = useState("");
   const [usageSummary, setUsageSummary] = useState<UsageSummary | null>(null);
   const [currentIrId, setCurrentIrId] = useState<string | undefined>(undefined);
+  const [snapshotId, setSnapshotId] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setUserId(loadOrCreateUserId());
@@ -134,8 +137,10 @@ export function IntentBox({ data }: IntentBoxProps) {
       const body = (await resp.json()) as GenerateResponse;
       setResult(body);
       if (body.profile) setProfile(body.profile);
+      // Track snapshot ID for the chatbot version chain.
+      if (body.snapshotId) setSnapshotId(body.snapshotId);
       // Assign a synthetic IR ID for telemetry correlation
-      setCurrentIrId(`ir_${Date.now()}`);
+      setCurrentIrId(body.snapshotId ?? `ir_${Date.now()}`);
     } catch (err) {
       setResult({ error: err instanceof Error ? err.message : String(err) });
     } finally {
@@ -446,6 +451,21 @@ export function IntentBox({ data }: IntentBoxProps) {
             ))}
           </ol>
         </div>
+      )}
+
+      {/* ── Fluid Chat Widget ── */}
+      {result?.ir && userId && userId !== "anon" && (
+        <FluidChat
+          userId={userId}
+          schemaName="tasks"
+          currentSnapshotId={snapshotId}
+          onIRChange={(newIR, newSnapshotId, newVersion) => {
+            // Update the result to trigger FluidView re-render with transition.
+            setResult((prev) => (prev ? { ...prev, ir: newIR, snapshotId: newSnapshotId } : prev));
+            setSnapshotId(newSnapshotId);
+            setCurrentIrId(newSnapshotId);
+          }}
+        />
       )}
     </div>
   );

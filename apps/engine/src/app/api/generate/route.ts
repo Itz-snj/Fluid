@@ -3,9 +3,10 @@ import { z } from "zod";
 import { intentKey } from "@fluid/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
 import { getEngine, getDb } from "@/lib/engine";
-import { enqueueRefreshJob } from "@fluid/db";
+import { enqueueRefreshJob, createSnapshot } from "@fluid/db";
 
 export const runtime = "nodejs";
+
 export const maxDuration = 120;
 
 const SERVER_TIMEOUT_MS = 90_000;
@@ -112,6 +113,26 @@ export async function POST(req: NextRequest) {
       historyLen: profile?.history.length,
     });
 
+    // Fire-and-forget: create an IR snapshot for the chatbot version chain.
+    let snapshotId: string | undefined;
+    if (userId && result.ir) {
+      try {
+        const db = getDb();
+        const snapshot = await createSnapshot(db, {
+          userId,
+          schemaName: taskSchema.name,
+          irJson: result.ir,
+          source: "generate",
+          changeDesc: learn
+            ? `Generated from refined intent`
+            : `Generated from intent: "${intent.slice(0, 80)}"`,
+        });
+        snapshotId = snapshot.id;
+      } catch {
+        // DB might not be available in dev — snapshot creation is best-effort.
+      }
+    }
+
     // Fire-and-forget: check if the user's IR should be refreshed in the background.
     if (userId && result.cached) {
       void engine
@@ -136,6 +157,7 @@ export async function POST(req: NextRequest) {
       latencyMs,
       attempts: result.attempts,
       profile,
+      snapshotId,
     });
   } catch (err) {
     const latencyMs = Date.now() - started;

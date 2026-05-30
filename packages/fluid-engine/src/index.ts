@@ -50,4 +50,9 @@ export type {
 } from "./llm";
 
 export { buildSystemPrompt } from "./prompt";
+export { buildPatchPrompt } from "./patch-prompt";
+export type { PatchChatMessage } from "./patch-prompt";
+
+export { patchIR } from "./patch";
+export type { PatchIROptions, PatchIRResult } from "./patch";
 
