@@ -64,3 +64,4 @@ Thumbs.db
 ai_context.md
 
 bun.lock
+packages/fluid-db/drizzle
