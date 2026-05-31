@@ -67,16 +67,69 @@ The developer's app declares these entities and endpoints. You must only referen
 ${JSON.stringify(serializeSchema(schema), null, 2)}
 \`\`\`
 
+# EXACT OUTPUT FORMAT — study this example carefully and copy the field names exactly
+
+This is a complete, valid IR for a task kanban board. Use this as your template:
+
+\`\`\`json
+{
+  "version": 1,
+  "archetype": "task-kanban",
+  "schema": "${schema.name}",
+  "root": {
+    "type": "stack",
+    "direction": "col",
+    "gap": "md",
+    "children": [
+      {
+        "type": "heading",
+        "text": "My Tasks",
+        "level": 1
+      },
+      {
+        "type": "kanban",
+        "query": { "entity": "Task", "sortBy": "dueDate" },
+        "groupBy": "status",
+        "columns": ["backlog", "todo", "in_progress", "done"],
+        "card": {
+          "type": "card",
+          "title": { "kind": "binding", "entity": "Task", "field": "title" },
+          "subtitle": { "kind": "binding", "entity": "Task", "field": "description" },
+          "badges": [
+            { "type": "badge", "binding": { "kind": "binding", "entity": "Task", "field": "priority", "format": "priority" }, "tone": "warn" },
+            { "type": "badge", "binding": { "kind": "binding", "entity": "Task", "field": "dueDate", "format": "relative-date" } }
+          ],
+          "actions": [
+            {
+              "type": "action",
+              "label": "Update status",
+              "mutation": "updateTaskStatus",
+              "args": { "id": { "kind": "binding", "entity": "Task", "field": "id" }, "status": "done" },
+              "style": "secondary"
+            }
+          ]
+        }
+      }
+    ]
+  }
+}
+\`\`\`
+
+STRUCTURAL RULES — violations will cause validation failure:
+- \`stack\` → use \`children\` (array). NEVER use \`items\`.
+- \`kanban\` → MUST have all four: \`query\`, \`groupBy\`, \`columns\` (array of strings), \`card\` (object).
+- \`list\` → MUST have \`query\` and \`item\` (a node object). NEVER use \`children\`.
+- \`split\` → MUST have \`left\` (node) and \`right\` (node). NEVER use \`children\`.
+- \`grid\` → use \`children\` (array).
+- Bindings: \`{ "kind": "binding", "entity": "...", "field": "..." }\`. Use \`kind\`, NOT \`type\`.
+- \`card\` inside \`kanban\` or \`list.item\` MUST be \`{ "type": "card", ... }\`.
+
 # Design goals
 
-- The user's intent is the primary signal. Match the layout shape to how they described their workflow.
-- Show data the user said they care about; hide everything else.
-- Group, filter, and sort to surface what's important first.
-- Use compact lists when the user mentioned high volume; comfortable cards when they want detail per item.
-- Pick a layout that fits the intent: kanban for status workflows, split-panel for two related entities, dashboard with stats for high-level overviews, simple list for \"just show me everything.\"
-- When usage observations are provided, **prioritise sections the user interacts with** and omit or collapse sections they never touch.
-- When a \`currentUserName\` is given in the context, use it to resolve possessive references (\"my deals\" \u2192 filter owner equals that name).
-- When mutations are declared, place action buttons (\`card.actions\`) on cards where the mutation is contextually useful. Prefer a single, clear label (\"Mark done\", \"Move to next stage\").
+- Match the layout to the intent: kanban for workflows, list for browsing, split for two entities, stats for overview.
+- Only reference entities/fields from the schema. Misspelled names fail validation.
+- When mutations are declared, add \`actions\` to cards.
+- Output ONE JSON object. No prose, no fences.
 
 Now output the IR JSON.`;
 }

@@ -89,7 +89,16 @@ export function Dashboard({ data, schema }: DashboardProps) {
     localStorage.setItem("fluid_auto_adapt", String(next));
   };
 
-  const handleGenerate = () => setIntent(inputValue);
+  const handleGenerate = () => {
+    setPatchedIR(null);
+    if (inputValue === intent) {
+      // Same intent — force a fresh generation bypassing the server cache
+      refetch({ bypassCache: true });
+    } else {
+      // New intent — updating state triggers auto-refetch in useFluidIR
+      setIntent(inputValue);
+    }
+  };
 
   const handleIRChange = (newIR: FluidIR, snapshotId: string, _version: number) => {
     setPatchedIR(newIR);

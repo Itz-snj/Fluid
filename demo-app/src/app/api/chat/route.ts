@@ -35,9 +35,12 @@ export async function POST(req: NextRequest) {
   const engine = getEngine();
   const db = getDb();
 
-  // Load current IR from snapshot
+  // Resolve current IR — prefer the client-supplied IR (most up to date,
+  // includes any already-applied chat patches), fall back to DB snapshot.
   let currentIR: FluidIR;
-  if (currentSnapshotId) {
+  if (body.currentIR) {
+    currentIR = body.currentIR;
+  } else if (currentSnapshotId) {
     const snapshot = await getActiveSnapshot(db, userId, schemaName);
     if (snapshot) {
       currentIR = snapshot.irJson;
@@ -47,11 +50,9 @@ export async function POST(req: NextRequest) {
         { status: 404 }
       );
     }
-  } else if (body.currentIR) {
-    currentIR = body.currentIR;
   } else {
     return NextResponse.json(
-      { error: "currentSnapshotId or currentIR is required" },
+      { error: "currentIR or currentSnapshotId is required" },
       { status: 400 }
     );
   }

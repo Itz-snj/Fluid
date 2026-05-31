@@ -28,8 +28,16 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   try {
-    // Creates a new snapshot with the target's IR (append-only version chain)
-    const newSnapshot = await revertToSnapshot(db, userId, schemaName, resolvedSnapshotId);
+    // The snapshotId passed is the snapshot CREATED by the patch (e.g. v2, the list view).
+    // "Revert this change" means go BACK to what was before that patch — i.e. v2's parent (v1, the kanban).
+    const patchedSnapshot = await getSnapshot(db, resolvedSnapshotId);
+    if (!patchedSnapshot) {
+      return NextResponse.json({ error: `Snapshot ${resolvedSnapshotId} not found` }, { status: 404 });
+    }
+
+    // If there's a parent, revert to it. If it's the root snapshot, revert to itself.
+    const revertTargetId = patchedSnapshot.parentId ?? resolvedSnapshotId;
+    const newSnapshot = await revertToSnapshot(db, userId, schemaName, revertTargetId);
 
     // Load the full data including irJson
     const snapshot = await getSnapshot(db, newSnapshot.id);

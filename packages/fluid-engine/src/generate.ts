@@ -10,6 +10,113 @@ import type { LLMProvider } from "./llm";
 import { buildSystemPrompt } from "./prompt";
 import { intentKey } from "./cache";
 
+/**
+ * Build a guaranteed-valid fallback IR from the schema when the LLM fails.
+ * Always produces a simple list view of the first entity — never throws.
+ */
+function buildFallbackIR(schema: FluidSchema, intent: string): FluidIR {
+  const entityName = Object.keys(schema.entities)[0] ?? "Item";
+  const entity = schema.entities[entityName];
+  const fields = Object.keys(entity?.fields ?? {});
+
+  // Try to detect a status/priority field for kanban grouping
+  const statusField = fields.find((f) =>
+    ["status", "stage", "state"].includes(f.toLowerCase())
+  );
+  const titleField = fields.find((f) =>
+    ["title", "name", "label", "subject"].includes(f.toLowerCase())
+  ) ?? fields[0];
+  const descField = fields.find((f) =>
+    ["description", "desc", "body", "summary", "notes"].includes(f.toLowerCase())
+  );
+  const priorityField = fields.find((f) => f.toLowerCase().includes("priority"));
+  const dateField = fields.find((f) =>
+    ["duedate", "due_date", "due", "deadline", "closedate"].includes(f.toLowerCase())
+  );
+
+  // Check if intent suggests a kanban
+  const wantsKanban = /kanban|board|column|status|stage/i.test(intent);
+  // Check if intent suggests a list
+  const wantsList = /list|table|row|all tasks|show.*tasks|show.*all/i.test(intent);
+
+  // Get status enum values for kanban columns
+  const statusValues: string[] = statusField
+    ? (entity?.fields[statusField]?.values ?? [])
+    : [];
+
+  const cardBadges: object[] = [];
+  if (priorityField) {
+    cardBadges.push({ type: "badge", binding: { kind: "binding", entity: entityName, field: priorityField, format: "priority" } });
+  }
+  if (dateField) {
+    cardBadges.push({ type: "badge", binding: { kind: "binding", entity: entityName, field: dateField, format: "relative-date" } });
+  }
+
+  const cardFields: object[] = fields
+    .filter((f) => f !== titleField && f !== descField && f !== priorityField && f !== dateField && f !== statusField)
+    .slice(0, 2)
+    .map((f) => ({ type: "field", binding: { kind: "binding", entity: entityName, field: f }, label: entity?.fields[f]?.label ?? f }));
+
+  const baseCard = {
+    type: "card",
+    title: { kind: "binding", entity: entityName, field: titleField },
+    ...(descField ? { subtitle: { kind: "binding", entity: entityName, field: descField } } : {}),
+    ...(cardBadges.length ? { badges: cardBadges } : {}),
+    ...(cardFields.length ? { fields: cardFields } : {}),
+  };
+
+  // Build mutations actions if available
+  const firstMutation = schema.mutations ? Object.entries(schema.mutations)[0] : null;
+  if (firstMutation) {
+    const [mutName, mut] = firstMutation;
+    const idArg = Object.entries(mut.args).find(([, v]) => v.type === "string" || v.type === "id")?.[0] ?? "id";
+    (baseCard as Record<string, unknown>).actions = [{
+      type: "action",
+      label: mut.label ?? "Update",
+      mutation: mutName,
+      args: { [idArg]: { kind: "binding", entity: entityName, field: "id" } },
+      style: "secondary",
+    }];
+  }
+
+  let rootNode: object;
+
+  if (wantsKanban && statusField && statusValues.length >= 2) {
+    rootNode = {
+      type: "kanban",
+      query: { entity: entityName },
+      groupBy: statusField,
+      columns: statusValues,
+      card: baseCard,
+    };
+  } else {
+    rootNode = {
+      type: "list",
+      query: { entity: entityName },
+      variant: "comfortable",
+      item: baseCard,
+      emptyText: "No items found.",
+    };
+  }
+
+  const ir = {
+    version: 1 as const,
+    archetype: "auto-fallback",
+    schema: schema.name,
+    root: {
+      type: "stack" as const,
+      direction: "col" as const,
+      gap: "md" as const,
+      children: [
+        { type: "heading", text: entityName + "s", level: 1 },
+        rootNode,
+      ],
+    },
+  };
+
+  return ir as unknown as FluidIR;
+}
+
 export interface GenerateIROptions {
   schema: FluidSchema;
   intent: string;
@@ -93,8 +200,10 @@ export async function generateIR(
         signal: opts.signal,
       });
       usage = result.usage;
+      // Strip <think>...</think> reasoning blocks some models emit
+      const text = result.text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
       try {
-        const parsed = parseIR(result.text);
+        const parsed = parseIR(text);
         const validated = validateIR(parsed);
         checkIRAgainstSchema(validated, opts.schema);
         await cache.set(key, validated);
@@ -104,9 +213,13 @@ export async function generateIR(
         userMessage = buildRetryMessage(opts.intent, err);
       }
     }
-    throw new Error(
-      `IR generation failed after ${MAX_RETRIES + 1} attempts: ${errMsg(lastError)}`,
-    );
+
+    // All LLM attempts failed — build a valid IR programmatically so the
+    // user always gets a working UI instead of an error screen.
+    console.warn(`[fluid] LLM failed after ${MAX_RETRIES + 1} attempts, using fallback IR. Last error: ${errMsg(lastError)}`);
+    const fallback = buildFallbackIR(opts.schema, opts.intent);
+    await cache.set(key, fallback);
+    return fallback;
   };
 
   const ir = cache.singleFlight

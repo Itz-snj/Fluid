@@ -1,18 +1,17 @@
 import Groq from "groq-sdk";
 import type { GenerateOptions, GenerateResult, LLMProvider } from "./provider";
 
-const DEFAULT_MODEL = "meta-llama/llama-4-scout-17b-16e-instruct";
+const DEFAULT_MODEL = "llama-3.3-70b-versatile";
 
 /**
  * Groq LLM provider.
  *
  * Uses the Groq SDK for ultra-fast inference on open-source models.
- * Groq is free with generous rate limits — ideal for development.
  *
  * Recommended models:
- * - meta-llama/llama-4-scout-17b-16e-instruct (best for structured JSON)
- * - llama-3.3-70b-versatile (powerful, good at following schemas)
- * - gemma2-9b-it (fast, smaller)
+ * - llama-3.3-70b-versatile  ← best overall (instruction following, JSON)
+ * - meta-llama/llama-4-scout-17b-16e-instruct (faster, smaller)
+ * - gemma2-9b-it (fast, smallest)
  *
  * Get a free key at: https://console.groq.com
  */
@@ -36,14 +35,14 @@ export class GroqProvider implements LLMProvider {
       const completion = await this.client.chat.completions.create(
         {
           model: this.model,
-          max_tokens: opts.maxTokens ?? 8000,
-          temperature: 0.2,
+          max_tokens: opts.maxTokens ?? 4096,
+          temperature: 0.1,
           response_format: { type: "json_object" },
           messages: [
             {
               role: "system",
               content: opts.systemPrompt +
-                "\n\nIMPORTANT: You MUST respond with valid JSON only. No markdown, no code fences, no explanation — just the JSON object.",
+                "\n\nCRITICAL: Respond with a single valid JSON object only. No markdown, no code fences, no prose — pure JSON.",
             },
             { role: "user", content: opts.userMessage },
           ],

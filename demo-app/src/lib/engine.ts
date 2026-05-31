@@ -47,7 +47,7 @@ export function getEngine(): FluidEngine {
     );
   }
 
-  const model = process.env.GROQ_MODEL || "meta-llama/llama-4-scout-17b-16e-instruct";
+  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   const provider = createGroqProvider(apiKey, model);
   console.log(`[fluid] Using Groq → ${model}`);
 

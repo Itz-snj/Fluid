@@ -179,6 +179,7 @@ export async function patchIR(
     const result = await provider.generate({
       systemPrompt,
       userMessage: currentUserMessage,
+      maxTokens: 4096, // patch output is always smaller than full generate
       signal: opts.signal,
     });
     usage = result.usage;
