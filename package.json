@@ -12,7 +12,7 @@
     "dev:crm": "bun --filter='@fluid-app/crm' dev",
     "build": "bun --filter='@fluid-app/engine' build",
     "build:crm": "bun --filter='@fluid-app/crm' build",
-    "build:packages": "bun --filter='./packages/fluid-core' build && bun --filter='./packages/fluid-engine' build && bun --filter='./packages/fluid-react' build",
+    "build:packages": "(cd packages/fluid-core && bun run build) && (cd packages/fluid-engine && bun run build) && (cd packages/fluid-react && bun run build)",
     "smoke": "bun --filter='@fluid-app/engine' smoke"
   },
   "devDependencies": {

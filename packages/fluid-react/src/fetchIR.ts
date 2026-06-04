@@ -4,6 +4,12 @@ export interface FetchIRRequest {
   intent: string;
   bypassCache?: boolean;
   userId?: string;
+  /**
+   * Extra fields merged into the POST body. Useful for app-specific options
+   * like `{ learn: true, role: "engineer" }` that the consumer's route reads
+   * and forwards to `engine.refine`.
+   */
+  extraBody?: Record<string, unknown>;
 }
 
 export interface FetchIRResponse {
@@ -17,6 +23,13 @@ export interface FetchIRResponse {
     cacheReadTokens: number;
     cacheCreationTokens: number;
   } | null;
+  /**
+   * Returned by the learn-loop path (engine.refine). `null` for stateless
+   * generate calls. Shape is `IntentProfile` from @fluid/engine.
+   */
+  profile?: unknown;
+  /** Server-issued snapshot ID, when the consumer's route persists snapshots. */
+  snapshotId?: string;
 }
 
 export interface FetchIROptions extends FetchIRRequest {
@@ -35,11 +48,12 @@ export interface FetchIROptions extends FetchIRRequest {
  * to define.
  */
 export async function fetchIR(opts: FetchIROptions): Promise<FetchIRResponse> {
-  const { endpoint, init, ...body } = opts;
+  const { endpoint, init, extraBody, ...body } = opts;
+  const merged = { ...body, ...(extraBody ?? {}) };
   const res = await fetch(endpoint, {
     method: "POST",
     headers: { "content-type": "application/json", ...(init?.headers ?? {}) },
-    body: JSON.stringify(body),
+    body: JSON.stringify(merged),
     ...init,
   });
   if (!res.ok) {

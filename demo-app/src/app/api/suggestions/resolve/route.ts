@@ -33,11 +33,14 @@ export async function POST(req: NextRequest) {
   const db = getDb();
 
   try {
-    await resolveSuggestion(db, suggestionId, action, userId);
+    const resolvedStatus = action === "accept" ? "accepted" : "dismissed";
+    await resolveSuggestion(db, suggestionId, resolvedStatus);
 
     return NextResponse.json({
       ok: true,
-      message: `Suggestion ${action}ed`,
+      message: `Suggestion ${resolvedStatus}`,
+      // userId is captured here in case future audit logging needs it.
+      userId,
     });
   } catch (err) {
     return NextResponse.json(

@@ -26,7 +26,8 @@ export async function GET(req: NextRequest) {
   }
 
   const db = getDb();
-  const suggestions = await getPendingSuggestions(db, userId, schemaName);
+  const all = await getPendingSuggestions(db, userId);
+  const suggestions = all.filter((s) => s.schemaName === schemaName);
 
   return NextResponse.json({ suggestions });
 }

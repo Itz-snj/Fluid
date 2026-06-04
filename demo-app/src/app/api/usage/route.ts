@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/engine";
-import { getUsageSummary } from "@fluid/db";
+import { getEngine } from "@/lib/engine";
 
 /**
  * GET /api/usage
@@ -22,10 +21,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 });
   }
 
-  const db = getDb();
+  const engine = getEngine();
 
   try {
-    const summary = await getUsageSummary(db, userId, schemaName, days);
+    const summary = await engine.usageTracker.summarize(userId, schemaName, days);
 
     return NextResponse.json({
       userId,

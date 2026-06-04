@@ -51,11 +51,17 @@ export function Dashboard({ data, schema }: DashboardProps) {
     endpoint: "/api/generate",
     intent,
     userId: learnMode ? userId : undefined,
-    learn: learnMode,
-    role,
-    device: "desktop",
-    currentUserName: userName,
-  }) || { ir: null, loading: false, error: null, refetch: () => {}, profile: null };
+    extraBody: {
+      learn: learnMode,
+      role,
+      device: "desktop",
+      currentUserName: userName,
+    },
+  });
+
+  // The IR loading hook returns `profile: unknown`; cast to the shape we
+  // know the /api/generate route returns when learn=true.
+  const learnedProfile = profile as { history: { intent: string; at: number }[] } | null;
 
   // Clear patchedIR whenever we generate a new intent
   useEffect(() => { setPatchedIR(null); }, [intent]);
@@ -65,12 +71,12 @@ export function Dashboard({ data, schema }: DashboardProps) {
 
   useFluidTelemetry({
     userId,
+    schemaName: "demo",
     endpoint: "/api/telemetry",
     enabled: !!userId,
   });
 
-  const mutationsResult = useMutations?.({ schema, endpoint: "/api/mutate" });
-  const handleMutation = mutationsResult?.dispatch || (() => {});
+  useMutations({ endpoint: "/api/mutate" });
 
   useEffect(() => {
     if (ir && (ir as any).snapshotId) {
@@ -179,8 +185,8 @@ export function Dashboard({ data, schema }: DashboardProps) {
             </div>
             <span className={`fluid-toggle-label ${learnMode ? "active" : ""}`}>
               Remember preferences
-              {learnMode && profile && profile.history.length > 0 && (
-                <span className="fluid-history-badge">{profile.history.length}</span>
+              {learnMode && learnedProfile && learnedProfile.history.length > 0 && (
+                <span className="fluid-history-badge">{learnedProfile.history.length}</span>
               )}
             </span>
           </label>
@@ -289,7 +295,7 @@ export function Dashboard({ data, schema }: DashboardProps) {
               <div>
                 <p className="fluid-error-title">Generation failed</p>
                 <p className="fluid-error-detail">{typeof error === "string" ? error : "An error occurred"}</p>
-                <button onClick={refetch} className="fluid-retry-btn">Try Again</button>
+                <button onClick={() => refetch()} className="fluid-retry-btn">Try Again</button>
               </div>
             </div>
           )}
@@ -301,7 +307,6 @@ export function Dashboard({ data, schema }: DashboardProps) {
                 ir={ir}
                 data={data}
                 schema={schema}
-                onMutate={handleMutation}
               />
             </div>
           )}

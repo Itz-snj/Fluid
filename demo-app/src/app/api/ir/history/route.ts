@@ -36,7 +36,6 @@ export async function GET(req: NextRequest) {
         source: s.source,
         changeDesc: s.changeDesc,
         createdAt: s.createdAt,
-        isActive: s.isActive,
       })),
     });
   } catch (err) {

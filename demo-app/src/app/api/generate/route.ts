@@ -119,7 +119,6 @@ export async function POST(req: NextRequest) {
         userId,
         bypassCache: bypassCache === true,
         signal: ac.signal,
-        contextSignals,
       }));
 
     const latencyMs = Date.now() - started;

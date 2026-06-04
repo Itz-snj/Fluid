@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { UsageEvent } from "@fluid/engine";
 import { getEngine } from "@/lib/engine";
 
 /**
@@ -6,22 +7,16 @@ import { getEngine } from "@/lib/engine";
  *
  * Record usage events for analytics and AI suggestions.
  *
- * Events tracked:
- * - view: User viewed a UI section
- * - interact: User interacted with an element
- * - dwell: Time spent on a section
- *
- * Body:
- * - userId (required)
- * - events: Array of { type, nodeType, nodeId, duration?, timestamp }
+ * Body: { events: UsageEvent[] } — exactly the payload the @fluid/react
+ * `useFluidTelemetry` hook sends.
  */
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { userId, events } = body;
+  const body = await req.json().catch(() => null);
+  const events = body?.events;
 
-  if (!userId || !Array.isArray(events)) {
+  if (!Array.isArray(events)) {
     return NextResponse.json(
-      { error: "userId and events array are required" },
+      { error: "events array is required" },
       { status: 400 }
     );
   }
@@ -29,19 +24,7 @@ export async function POST(req: NextRequest) {
   const engine = getEngine();
 
   try {
-    // Track each event
-    for (const event of events) {
-      await engine.trackUsage({
-        userId,
-        schemaName: "demo",
-        eventType: event.type || "view",
-        nodeType: event.nodeType,
-        nodeId: event.nodeId,
-        duration: event.duration,
-        timestamp: event.timestamp || Date.now(),
-      });
-    }
-
+    await engine.usageTracker.recordBatch(events as UsageEvent[]);
     return NextResponse.json({ ok: true, recorded: events.length });
   } catch (err) {
     console.error("[telemetry] Error recording events:", err);

@@ -18,17 +18,22 @@ import { demoSchema } from "@/schemas/demo.fluid";
  */
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { mutation, args } = body;
+  const mutation = typeof body?.mutation === "string" ? body.mutation : "";
+  const args = (body?.args ?? {}) as Record<string, unknown>;
 
-  if (!mutation || !args) {
+  if (!mutation) {
     return NextResponse.json(
       { error: "mutation and args are required" },
       { status: 400 }
     );
   }
 
-  // Look up mutation in schema
-  const mutationDef = demoSchema.mutations?.[mutation];
+  // Look up mutation in schema (typed as a string-keyed record so the
+  // dynamic lookup typechecks).
+  const mutations = demoSchema.mutations as
+    | Record<string, (typeof demoSchema.mutations)[keyof typeof demoSchema.mutations]>
+    | undefined;
+  const mutationDef = mutations?.[mutation];
   if (!mutationDef) {
     return NextResponse.json(
       { error: `Mutation "${mutation}" not found in schema` },

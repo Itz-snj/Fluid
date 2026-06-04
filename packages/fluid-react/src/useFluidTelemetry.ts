@@ -16,6 +16,8 @@ export interface UseFluidTelemetryOptions {
   /** Flush interval in ms. Default 10 000 (10 s). */
   flushIntervalMs?: number;
   device?: "mobile" | "desktop";
+  /** When false, all listeners + flushes are disabled. Default true. */
+  enabled?: boolean;
 }
 
 /**
@@ -39,6 +41,7 @@ export function useFluidTelemetry(opts: UseFluidTelemetryOptions = {}): void {
   const schemaName = opts.schemaName ?? ctx?.schemaName ?? "";
   const endpoint = opts.endpoint ?? ctx?.endpoints.telemetry ?? "/api/telemetry";
   const { irId, device } = opts;
+  const enabled = opts.enabled !== false;
   const flushMs = opts.flushIntervalMs ?? 10_000;
   const bufferRef = useRef<UsageEvent[]>([]);
 
@@ -80,25 +83,28 @@ export function useFluidTelemetry(opts: UseFluidTelemetryOptions = {}): void {
 
   // Periodic flush
   useEffect(() => {
+    if (!enabled) return;
     const id = setInterval(() => void flush(), flushMs);
     return () => {
       clearInterval(id);
       void flush();
     };
-  }, [flush, flushMs]);
+  }, [flush, flushMs, enabled]);
 
   // Delegated click listener
   useEffect(() => {
+    if (!enabled) return;
     const handler = (e: MouseEvent) => {
       const target = (e.target as HTMLElement).closest("[data-fluid-node]");
       if (target instanceof HTMLElement) record("click", target);
     };
     document.addEventListener("click", handler, { passive: true });
     return () => document.removeEventListener("click", handler);
-  }, [record]);
+  }, [record, enabled]);
 
   // IntersectionObserver for "view" events (1 s dwell, 50% visible)
   useEffect(() => {
+    if (!enabled) return;
     const dwellTimers = new Map<Element, ReturnType<typeof setTimeout>>();
 
     const observer = new IntersectionObserver(
@@ -136,5 +142,5 @@ export function useFluidTelemetry(opts: UseFluidTelemetryOptions = {}): void {
       observer.disconnect();
       dwellTimers.forEach((t) => clearTimeout(t));
     };
-  }, [record]);
+  }, [record, enabled]);
 }

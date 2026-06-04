@@ -43,7 +43,7 @@ export interface MutationDef<TArgs = Record<string, unknown>> {
   /** Argument declarations — used for server-side validation and LLM instruction. */
   args: Record<string, { type: FieldType; required?: boolean }>;
   /** Server-side handler. Receives validated args. */
-  handler: (args: TArgs) => Promise<{ ok: boolean; error?: string }>;
+  handler: (args: TArgs) => Promise<{ ok: boolean; error?: string; message?: string }>;
   /** Short human-readable label surfaced in the system prompt. */
   label?: string;
 }
