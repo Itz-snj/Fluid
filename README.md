@@ -107,33 +107,45 @@ Phase 2 code reorganized into three publishable packages. Engine became BYOK + a
 
 `engine.refine` + `ProfileStore` are in. The showcase app exposes a "Remember my preferences" toggle that persists a stable `userId` in localStorage and posts `learn: true`; the API surface returns the updated `IntentProfile` so the UI can render "what Fluid remembers about you." Default `ProfileStore` is in-memory; swap for Redis/Postgres via the adapter interface. See [ARCHITECTURE.md § The learn loop](./ARCHITECTURE.md#the-learn-loop--enginerefine-and-profilestore) for the prompt-expansion strategy, cache-key implications, and server-load tradeoffs.
 
-### Phase 3 — Consumer demo app (queued)
+### Phase 3 — npm Publishing (v0.1.0)
 
-A separate Next.js app outside this workspace that depends on the published Fluid packages, demonstrating end-to-end developer integration (define schema, wire `createEngine`, call `useFluidIR` from a client component, render with `FluidView`).
+All three core packages are now published to npm under the `@fluid-genui` scope:
+- `@fluid-genui/core@0.1.0` — schema + IR types
+- `@fluid-genui/engine@0.1.0` — LLM bridge + generation engine
+- `@fluid-genui/react@0.1.0` — React components + hooks + provider
+
+Includes `<FluidProvider>` for zero-prop mounting of `<FluidChat>`, context-driven endpoint routing, and full TypeScript support. See [packages/fluid-react/SERVER_CONTRACT.md](./packages/fluid-react/SERVER_CONTRACT.md) for the HTTP API spec consumers implement.
+
+### Phase 4 — Consumer demo app (queued)
+
+A separate Next.js app outside this workspace that depends on the published Fluid packages, demonstrating end-to-end developer integration (define schema, wire `createEngine`, call `useFluidIR` from a client component, mount `<FluidProvider>` + `<FluidView>` + `<FluidChat>`).
 
 ## Using Fluid in a Next.js app
 
 ### 1. Install
 
-In a Bun workspace consuming this repo as a workspace dependency:
+Install the published packages from npm:
 
-```json
-{
-  "dependencies": {
-    "@fluid/core": "workspace:*",
-    "@fluid/engine": "workspace:*",
-    "@fluid/react": "workspace:*"
-  }
-}
+```bash
+npm install @fluid-genui/core @fluid-genui/engine @fluid-genui/react
 ```
 
-(Once published, plain semver versions will work the same way.)
+Or with Bun:
+
+```bash
+bun add @fluid-genui/core @fluid-genui/engine @fluid-genui/react
+```
+
+**npm packages:**
+- [`@fluid-genui/core`](https://www.npmjs.com/package/@fluid-genui/core) — schema definition + IR types
+- [`@fluid-genui/engine`](https://www.npmjs.com/package/@fluid-genui/engine) — LLM bridge + engine
+- [`@fluid-genui/react`](https://www.npmjs.com/package/@fluid-genui/react) — React components + hooks
 
 ### 2. Define a schema
 
 ```ts
 // src/schemas/tasks.fluid.ts
-import { defineSchema } from "@fluid/core";
+import { defineSchema } from "@fluid-genui/core";
 
 export const taskSchema = defineSchema({
   name: "tasks",
@@ -164,7 +176,7 @@ export const taskSchema = defineSchema({
 ```ts
 // src/lib/engine.ts
 import "server-only";
-import { createEngine, type FluidEngine } from "@fluid/engine";
+import { createEngine, type FluidEngine } from "@fluid-genui/engine";
 
 let cached: FluidEngine | null = null;
 export function getEngine(): FluidEngine {
@@ -203,7 +215,7 @@ export async function POST(req: NextRequest) {
 
 ```tsx
 "use client";
-import { FluidView, useFluidIR, type DataContext } from "@fluid/react";
+import { FluidView, useFluidIR, type DataContext } from "@fluid-genui/react";
 
 export function MyView({ data, intent, userId }: { data: DataContext; intent: string; userId?: string }) {
   const { ir, loading, error, refetch } = useFluidIR({
@@ -226,7 +238,7 @@ import {
   createEngine,
   type CacheAdapter,
   type ProfileStore,
-} from "@fluid/engine";
+} from "@fluid-genui/engine";
 
 const redisCache: CacheAdapter = {
   async get(key)            { /* SELECT … */ },
