@@ -1,5 +1,5 @@
 {
-  "name": "@fluid/telemetry",
+  "name": "@fluid-genui/telemetry",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@fluid/engine": "workspace:*"
+    "@fluid-genui/engine": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5"

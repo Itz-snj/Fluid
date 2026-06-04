@@ -1,5 +1,5 @@
 {
-  "name": "@fluid/db",
+  "name": "@fluid-genui/db",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@fluid/core": "workspace:*",
-    "@fluid/engine": "workspace:*",
+    "@fluid-genui/core": "workspace:*",
+    "@fluid-genui/engine": "workspace:*",
     "drizzle-orm": "^0.44.0",
     "postgres": "^3.4.5"
   },

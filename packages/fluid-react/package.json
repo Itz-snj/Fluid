@@ -1,8 +1,13 @@
 {
-  "name": "@fluid/react",
-  "version": "0.1.0",
+  "name": "@fluid-genui/react",
+  "version": "0.1.1",
   "description": "React components and hooks for Fluid — FluidProvider, FluidView, FluidChat, and the personalized-UI hook surface.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Itz-snj/Fluid"
+  },
+  "homepage": "https://github.com/Itz-snj/Fluid#readme",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -25,8 +30,8 @@
     "dev": "tsup --watch"
   },
   "dependencies": {
-    "@fluid/core": "^0.1.0",
-    "@fluid/engine": "^0.1.0"
+    "@fluid-genui/core": "^0.1.0",
+    "@fluid-genui/engine": "^0.1.0"
   },
   "peerDependencies": {
     "react": ">=19",

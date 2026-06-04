@@ -1,8 +1,13 @@
 {
-  "name": "@fluid/engine",
-  "version": "0.1.0",
+  "name": "@fluid-genui/engine",
+  "version": "0.1.1",
   "description": "BYOK LLM bridge for Fluid — turns user intent into validated FluidIR using Anthropic, Gemini, OpenRouter, or Groq.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Itz-snj/Fluid"
+  },
+  "homepage": "https://github.com/Itz-snj/Fluid#readme",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -24,7 +29,7 @@
     "dev": "tsup --watch"
   },
   "dependencies": {
-    "@fluid/core": "^0.1.0",
+    "@fluid-genui/core": "^0.1.0",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
