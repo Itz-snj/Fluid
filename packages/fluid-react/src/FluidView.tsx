@@ -9,9 +9,11 @@ import {
 } from "@fluid/core";
 import { type DataContext } from "./data";
 import { renderNode } from "./render";
+import { useFluidContext } from "./FluidProvider";
 
 interface FluidViewProps {
-  ir: unknown;
+  /** Optional when a FluidProvider supplies the IR. */
+  ir?: unknown;
   data: DataContext;
   /** Optional. When provided, IR is semantically checked against the schema. */
   schema?: FluidSchema;
@@ -25,6 +27,8 @@ interface FluidViewProps {
  * falls back to a CSS opacity+translateY animation on Safari/Firefox.
  */
 export function FluidView({ ir, data, schema }: FluidViewProps) {
+  const ctx = useFluidContext();
+  const effectiveIR = ir ?? ctx?.ir ?? null;
   const [displayIR, setDisplayIR] = useState<FluidIR | null>(null);
   const [transitioning, setTransitioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,10 +36,17 @@ export function FluidView({ ir, data, schema }: FluidViewProps) {
   const prevIRRef = useRef<unknown>(null);
 
   useEffect(() => {
+    if (effectiveIR === null || effectiveIR === undefined) {
+      setDisplayIR(null);
+      prevIRRef.current = null;
+      setError(null);
+      return;
+    }
+
     // Validate the incoming IR.
     let validated: FluidIR;
     try {
-      validated = validateIR(ir);
+      validated = validateIR(effectiveIR);
       if (schema) checkIRAgainstSchema(validated, schema);
     } catch (err) {
       setError(String(err));
@@ -46,16 +57,16 @@ export function FluidView({ ir, data, schema }: FluidViewProps) {
     // Skip transition on first render.
     if (prevIRRef.current === null) {
       setDisplayIR(validated);
-      prevIRRef.current = ir;
+      prevIRRef.current = effectiveIR;
       return;
     }
 
     // Skip if IR hasn't actually changed.
-    if (JSON.stringify(ir) === JSON.stringify(prevIRRef.current)) {
+    if (JSON.stringify(effectiveIR) === JSON.stringify(prevIRRef.current)) {
       return;
     }
 
-    prevIRRef.current = ir;
+    prevIRRef.current = effectiveIR;
 
     // Try View Transition API (Chrome 111+).
     if (typeof document !== "undefined" && "startViewTransition" in document) {
@@ -77,7 +88,7 @@ export function FluidView({ ir, data, schema }: FluidViewProps) {
     }, 200);
 
     return () => clearTimeout(timeout);
-  }, [ir, schema]);
+  }, [effectiveIR, schema]);
 
   if (error) {
     return (

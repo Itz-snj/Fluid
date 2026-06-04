@@ -8,13 +8,19 @@ import {
   type SuggestionItem,
   type SnapshotMeta,
 } from "./useFluidChat";
+import { type FluidEndpoints, useFluidContext } from "./FluidProvider";
 
 export interface FluidChatProps {
-  userId: string;
+  /** Optional when a FluidProvider is mounted. */
+  userId?: string;
+  /** Optional when a FluidProvider is mounted. Default "tasks" only if neither is set. */
   schemaName?: string;
   currentSnapshotId?: string;
   currentIR?: FluidIR;
-  onIRChange: (newIR: FluidIR, snapshotId: string, version: number) => void;
+  /** Required when not using FluidProvider; otherwise falls back to provider's setIR. */
+  onIRChange?: (newIR: FluidIR, snapshotId: string, version: number) => void;
+  /** Per-component endpoint overrides; falls back to provider then "/api/*". */
+  endpoints?: FluidEndpoints;
 }
 
 const S = {
@@ -30,13 +36,15 @@ const S = {
   radiusSm: "10px",
 };
 
-export function FluidChat({
-  userId,
-  schemaName = "tasks",
-  currentSnapshotId,
-  currentIR,
-  onIRChange,
-}: FluidChatProps) {
+export function FluidChat(props: FluidChatProps = {}) {
+  const ctx = useFluidContext();
+  const userId = props.userId ?? ctx?.userId ?? "";
+  const schemaName = props.schemaName ?? ctx?.schemaName ?? "tasks";
+  const currentSnapshotId = props.currentSnapshotId ?? ctx?.currentSnapshotId;
+  const currentIR = props.currentIR ?? ctx?.ir ?? undefined;
+  const onIRChange = props.onIRChange;
+  const endpoints = props.endpoints;
+
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [showHistory, setShowHistory] = useState(false);
@@ -51,7 +59,14 @@ export function FluidChat({
     acceptSuggestion,
     dismissSuggestion,
     revert,
-  } = useFluidChat({ userId, schemaName, currentSnapshotId, currentIR, onIRChange });
+  } = useFluidChat({
+    userId,
+    schemaName,
+    currentSnapshotId,
+    currentIR,
+    onIRChange,
+    endpoints,
+  });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });

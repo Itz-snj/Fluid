@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useEffect } from "react";
+import { useFluidContext } from "./FluidProvider";
 
 export interface UseMutationsOptions {
-  /** POST endpoint that accepts `{ mutation: string, args: Record<string, unknown> }`. */
-  endpoint: string;
+  /**
+   * POST endpoint that accepts `{ mutation: string, args: Record<string, unknown> }`.
+   * Optional when a FluidProvider is mounted (falls back to endpoints.mutate).
+   */
+  endpoint?: string;
   /**
    * Called after a successful mutation.
    * Use this to trigger data re-fetching or optimistic UI updates.
@@ -32,8 +36,10 @@ export interface UseMutationsOptions {
  *
  * FluidView itself contains no event handlers — keeping it server-safe.
  */
-export function useMutations(opts: UseMutationsOptions): void {
-  const { endpoint, onSuccess, onError } = opts;
+export function useMutations(opts: UseMutationsOptions = {}): void {
+  const ctx = useFluidContext();
+  const endpoint = opts.endpoint ?? ctx?.endpoints.mutate ?? "/api/mutate";
+  const { onSuccess, onError } = opts;
 
   const handleMutationClick = useCallback(
     async (btn: HTMLElement) => {

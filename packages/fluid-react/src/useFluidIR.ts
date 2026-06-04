@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FluidIR } from "@fluid/core";
 import { type FetchIROptions, fetchIR } from "./fetchIR";
+import { useFluidContext } from "./FluidProvider";
 
-export interface UseFluidIROptions extends Omit<FetchIROptions, "init"> {
+export interface UseFluidIROptions extends Omit<FetchIROptions, "init" | "endpoint"> {
+  /** Optional when a FluidProvider is mounted. Defaults to endpoints.generate. */
+  endpoint?: string;
   /** Skip the initial fetch — call refetch() manually. */
   manual?: boolean;
 }
@@ -28,7 +31,10 @@ export interface UseFluidIRState {
  * component-local state.
  */
 export function useFluidIR(opts: UseFluidIROptions): UseFluidIRState {
-  const { endpoint, intent, userId, bypassCache, manual } = opts;
+  const ctx = useFluidContext();
+  const endpoint = opts.endpoint ?? ctx?.endpoints.generate ?? "/api/generate";
+  const userId = opts.userId ?? ctx?.userId;
+  const { intent, bypassCache, manual } = opts;
   const [ir, setIR] = useState<FluidIR | null>(null);
   const [loading, setLoading] = useState(!manual);
   const [error, setError] = useState<Error | null>(null);

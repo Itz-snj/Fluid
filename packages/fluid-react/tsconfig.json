@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "incremental": false,
     "paths": {
       "@fluid/core": ["../fluid-core/src"],
       "@fluid/engine": ["../fluid-engine/src"]
@@ -8,4 +9,3 @@
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]
 }
-

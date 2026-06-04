@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import {
   FluidView,
   FluidChat,
+  FluidProvider,
   useFluidIR,
   useFluidTelemetry,
   useMutations,
@@ -123,7 +124,7 @@ export function Dashboard({ data, schema }: DashboardProps) {
     { icon: "◈", label: "Focus Mode", prompt: "Show only high priority in-progress tasks" },
   ];
 
-  return (
+  const dashboard = (
     <div className="fluid-root">
       {/* Sidebar */}
       <aside className="fluid-sidebar">
@@ -337,15 +338,23 @@ export function Dashboard({ data, schema }: DashboardProps) {
       </div>
 
       {/* Chat — always bottom right, manages its own open state */}
-      {userId && (
-        <FluidChat
-          currentIR={ir ?? undefined}
-          userId={userId}
-          schemaName="demo"
-          currentSnapshotId={currentSnapshotId}
-          onIRChange={handleIRChange}
-        />
-      )}
+      {userId && <FluidChat />}
     </div>
+  );
+
+  if (!userId) return dashboard;
+
+  return (
+    <FluidProvider
+      userId={userId}
+      schemaName="demo"
+      ir={ir ?? null}
+      onIRChange={(newIR, snapshotId) => {
+        handleIRChange(newIR as FluidIR, snapshotId ?? "", 0);
+      }}
+      currentSnapshotId={currentSnapshotId}
+    >
+      {dashboard}
+    </FluidProvider>
   );
 }

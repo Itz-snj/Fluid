@@ -2,14 +2,17 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { UsageEvent } from "@fluid/engine";
+import { useFluidContext } from "./FluidProvider";
 
 export interface UseFluidTelemetryOptions {
-  userId: string;
-  schemaName: string;
+  /** Optional when a FluidProvider is mounted. */
+  userId?: string;
+  /** Optional when a FluidProvider is mounted. */
+  schemaName?: string;
   /** ID of the currently rendered IR — correlates events to a specific generation. */
   irId?: string;
-  /** POST endpoint that accepts `{ events: UsageEvent[] }`. */
-  endpoint: string;
+  /** POST endpoint that accepts `{ events: UsageEvent[] }`. Optional with provider. */
+  endpoint?: string;
   /** Flush interval in ms. Default 10 000 (10 s). */
   flushIntervalMs?: number;
   device?: "mobile" | "desktop";
@@ -30,8 +33,12 @@ export interface UseFluidTelemetryOptions {
  * No personal data is collected — only node types, entity labels, and
  * anonymous interaction counts.
  */
-export function useFluidTelemetry(opts: UseFluidTelemetryOptions): void {
-  const { userId, schemaName, irId, endpoint, device } = opts;
+export function useFluidTelemetry(opts: UseFluidTelemetryOptions = {}): void {
+  const ctx = useFluidContext();
+  const userId = opts.userId ?? ctx?.userId ?? "";
+  const schemaName = opts.schemaName ?? ctx?.schemaName ?? "";
+  const endpoint = opts.endpoint ?? ctx?.endpoints.telemetry ?? "/api/telemetry";
+  const { irId, device } = opts;
   const flushMs = opts.flushIntervalMs ?? 10_000;
   const bufferRef = useRef<UsageEvent[]>([]);
 

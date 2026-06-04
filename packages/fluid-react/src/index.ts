@@ -29,3 +29,14 @@ export type {
   SuggestionItem as FluidSuggestionItem,
   SnapshotMeta as FluidSnapshotMeta,
 } from "./useFluidChat";
+
+export {
+  FluidProvider,
+  useFluidContext,
+  DEFAULT_ENDPOINTS,
+} from "./FluidProvider";
+export type {
+  FluidEndpoints,
+  FluidContextValue,
+  FluidProviderProps,
+} from "./FluidProvider";

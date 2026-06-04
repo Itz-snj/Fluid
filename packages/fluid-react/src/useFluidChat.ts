@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FluidIR } from "@fluid/core";
+import {
+  type FluidEndpoints,
+  resolveEndpoints,
+  useFluidContext,
+} from "./FluidProvider";
 
 export interface ChatMessage {
   id?: number;
@@ -28,12 +33,19 @@ export interface SnapshotMeta {
 }
 
 export interface UseFluidChatOptions {
-  userId: string;
-  schemaName: string;
+  /** Optional when a FluidProvider is mounted. */
+  userId?: string;
+  /** Optional when a FluidProvider is mounted. */
+  schemaName?: string;
   currentSnapshotId?: string;
   /** The IR currently displayed — sent to the server so it knows what to patch. */
   currentIR?: FluidIR;
-  onIRChange: (newIR: FluidIR, snapshotId: string, version: number) => void;
+  /** Called when a patch/revert lands. Falls back to provider's setIR. */
+  onIRChange?: (newIR: FluidIR, snapshotId: string, version: number) => void;
+  /** Per-call endpoint overrides. Falls back to provider, then to "/api/*". */
+  endpoints?: FluidEndpoints;
+  /** Suggestion polling interval. Default 30 000 ms. Set 0 to disable. */
+  suggestionPollMs?: number;
 }
 
 export interface UseFluidChatReturn {
@@ -48,24 +60,63 @@ export interface UseFluidChatReturn {
   loadHistory: () => Promise<void>;
 }
 
-export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
-  const { userId, schemaName, currentSnapshotId, currentIR, onIRChange } = opts;
+export function useFluidChat(opts: UseFluidChatOptions = {}): UseFluidChatReturn {
+  const ctx = useFluidContext();
+
+  const userId = opts.userId ?? ctx?.userId ?? "";
+  const schemaName = opts.schemaName ?? ctx?.schemaName ?? "";
+  const currentSnapshotId = opts.currentSnapshotId ?? ctx?.currentSnapshotId;
+  const currentIR = opts.currentIR ?? ctx?.ir ?? undefined;
+  const suggestionPollMs = opts.suggestionPollMs ?? 30_000;
+  const endpoints = resolveEndpoints(opts.endpoints, ctx?.endpoints);
+
+  if (process.env.NODE_ENV !== "production" && !userId) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[fluid] useFluidChat called without userId and no FluidProvider in tree — chat features will be disabled.",
+    );
+  }
+
   const currentIRRef = useRef(currentIR);
   currentIRRef.current = currentIR;
+
+  const onIRChangeRef = useRef<UseFluidChatOptions["onIRChange"]>(opts.onIRChange);
+  onIRChangeRef.current = opts.onIRChange;
+
+  const ctxSetIRRef = useRef(ctx?.setIR);
+  ctxSetIRRef.current = ctx?.setIR;
+
+  const applyIR = useCallback(
+    (newIR: FluidIR, snapshotId: string, version: number) => {
+      if (onIRChangeRef.current) {
+        onIRChangeRef.current(newIR, snapshotId, version);
+      } else if (ctxSetIRRef.current) {
+        ctxSetIRRef.current(newIR, snapshotId, version);
+      } else if (process.env.NODE_ENV !== "production") {
+        // eslint-disable-next-line no-console
+        console.warn(
+          "[fluid] useFluidChat produced a new IR but no onIRChange handler or FluidProvider is wired — the change is lost.",
+        );
+      }
+    },
+    [],
+  );
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [isPatching, setIsPatching] = useState(false);
   const [irHistory, setIrHistory] = useState<SnapshotMeta[]>([]);
-  const onIRChangeRef = useRef(onIRChange);
-  onIRChangeRef.current = onIRChange;
 
-  // Load chat history on mount.
   const loadHistory = useCallback(async () => {
     if (!userId || userId === "anon") return;
     try {
       const [chatRes, histRes] = await Promise.all([
-        fetch(`/api/chat?userId=${encodeURIComponent(userId)}&schemaName=${schemaName}`),
-        fetch(`/api/ir/history?userId=${encodeURIComponent(userId)}&schemaName=${schemaName}`),
+        fetch(
+          `${endpoints.chat}?userId=${encodeURIComponent(userId)}&schemaName=${encodeURIComponent(schemaName)}`,
+        ),
+        fetch(
+          `${endpoints.irHistory}?userId=${encodeURIComponent(userId)}&schemaName=${encodeURIComponent(schemaName)}`,
+        ),
       ]);
       if (chatRes.ok) {
         const data = await chatRes.json();
@@ -73,24 +124,25 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
       }
       if (histRes.ok) {
         const data = await histRes.json();
-        setIrHistory(data.snapshots ?? []);
+        setIrHistory(data.snapshots ?? data.history ?? []);
       }
     } catch {
       /* swallow */
     }
-  }, [userId, schemaName]);
+  }, [userId, schemaName, endpoints.chat, endpoints.irHistory]);
 
   useEffect(() => {
     void loadHistory();
   }, [loadHistory]);
 
-  // Poll for suggestions every 30 seconds.
   useEffect(() => {
-    if (!userId || userId === "anon") return;
+    if (!userId || userId === "anon" || suggestionPollMs <= 0) return;
 
     const fetchSuggestions = async () => {
       try {
-        const res = await fetch(`/api/suggestions?userId=${encodeURIComponent(userId)}`);
+        const res = await fetch(
+          `${endpoints.suggestions}?userId=${encodeURIComponent(userId)}`,
+        );
         if (res.ok) {
           const data = await res.json();
           setSuggestions(data.suggestions ?? []);
@@ -101,21 +153,20 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
     };
 
     void fetchSuggestions();
-    const interval = setInterval(fetchSuggestions, 30_000);
+    const interval = setInterval(fetchSuggestions, suggestionPollMs);
     return () => clearInterval(interval);
-  }, [userId]);
+  }, [userId, endpoints.suggestions, suggestionPollMs]);
 
   const sendMessage = useCallback(
     async (text: string) => {
       if (!text.trim() || isPatching) return;
 
-      // Optimistic append.
       const userMsg: ChatMessage = { role: "user", content: text };
       setMessages((prev) => [...prev, userMsg]);
       setIsPatching(true);
 
       try {
-        const res = await fetch("/api/chat", {
+        const res = await fetch(endpoints.chat, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -137,8 +188,7 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
         setMessages((prev) => [...prev, assistantMsg]);
 
         if (data.canApply && data.newIR && data.newSnapshotId) {
-          onIRChangeRef.current(data.newIR, data.newSnapshotId, data.newVersion);
-          // Refresh history after a successful patch.
+          applyIR(data.newIR, data.newSnapshotId, data.newVersion);
           void loadHistory();
         }
       } catch (err) {
@@ -153,14 +203,22 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
         setIsPatching(false);
       }
     },
-    [isPatching, currentSnapshotId, userId, schemaName, loadHistory],
+    [
+      isPatching,
+      currentSnapshotId,
+      userId,
+      schemaName,
+      loadHistory,
+      endpoints.chat,
+      applyIR,
+    ],
   );
 
   const revert = useCallback(
     async (targetSnapshotId: string) => {
       setIsPatching(true);
       try {
-        const res = await fetch("/api/chat/revert", {
+        const res = await fetch(endpoints.chatRevert, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId, targetSnapshotId, schemaName }),
@@ -175,7 +233,7 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
             wasApplied: true,
           };
           setMessages((prev) => [...prev, revertMsg]);
-          onIRChangeRef.current(data.newIR, data.newSnapshotId, data.newVersion);
+          applyIR(data.newIR, data.newSnapshotId, data.newVersion);
           void loadHistory();
         }
       } catch (err) {
@@ -190,14 +248,14 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
         setIsPatching(false);
       }
     },
-    [userId, schemaName, loadHistory],
+    [userId, schemaName, loadHistory, endpoints.chatRevert, applyIR],
   );
 
   const acceptSuggestion = useCallback(
     async (id: string) => {
       setIsPatching(true);
       try {
-        const res = await fetch("/api/suggestions/resolve", {
+        const res = await fetch(endpoints.suggestionsResolve, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ suggestionId: id, action: "accept", userId }),
@@ -206,7 +264,7 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
 
         if (data.ok && data.newIR && data.newSnapshotId) {
           setSuggestions((prev) => prev.filter((s) => s.id !== id));
-          onIRChangeRef.current(data.newIR, data.newSnapshotId, data.newVersion);
+          applyIR(data.newIR, data.newSnapshotId, data.newVersion);
           void loadHistory();
         } else {
           setMessages((prev) => [
@@ -220,13 +278,13 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
         setIsPatching(false);
       }
     },
-    [userId, loadHistory],
+    [userId, loadHistory, endpoints.suggestionsResolve, applyIR],
   );
 
   const dismissSuggestion = useCallback(
     async (id: string) => {
       try {
-        await fetch("/api/suggestions/resolve", {
+        await fetch(endpoints.suggestionsResolve, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ suggestionId: id, action: "dismiss", userId }),
@@ -236,7 +294,7 @@ export function useFluidChat(opts: UseFluidChatOptions): UseFluidChatReturn {
         /* swallow */
       }
     },
-    [userId],
+    [userId, endpoints.suggestionsResolve],
   );
 
   return {

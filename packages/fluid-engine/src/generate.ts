@@ -69,7 +69,7 @@ function buildFallbackIR(schema: FluidSchema, intent: string): FluidIR {
   const firstMutation = schema.mutations ? Object.entries(schema.mutations)[0] : null;
   if (firstMutation) {
     const [mutName, mut] = firstMutation;
-    const idArg = Object.entries(mut.args).find(([, v]) => v.type === "string" || v.type === "id")?.[0] ?? "id";
+    const idArg = Object.entries(mut.args).find(([, v]) => v.type === "string")?.[0] ?? "id";
     (baseCard as Record<string, unknown>).actions = [{
       type: "action",
       label: mut.label ?? "Update",

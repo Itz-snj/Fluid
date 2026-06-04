@@ -66,7 +66,7 @@ function tryProgrammaticPatch(ir: FluidIR, message: string): FluidIR | null {
   const msg = message.toLowerCase();
 
   // Detect "X over/before Y" or "move X to top" for kanban columns
-  const root = ir.root as Record<string, unknown>;
+  const root = ir.root as unknown as Record<string, unknown>;
 
   // Find kanban node (direct root or in a stack)
   const findKanban = (node: unknown): Record<string, unknown> | null => {

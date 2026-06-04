@@ -1,18 +1,50 @@
 {
   "name": "@fluid/engine",
   "version": "0.1.0",
-  "private": true,
+  "description": "BYOK LLM bridge for Fluid — turns user intent into validated FluidIR using Anthropic, Gemini, OpenRouter, or Groq.",
+  "license": "MIT",
   "type": "module",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
   },
   "dependencies": {
+    "@fluid/core": "^0.1.0",
+    "zod": "^4.4.3"
+  },
+  "peerDependencies": {
+    "@anthropic-ai/sdk": ">=0.30.0",
+    "@google/generative-ai": ">=0.20.0",
+    "groq-sdk": ">=0.10.0"
+  },
+  "peerDependenciesMeta": {
+    "@anthropic-ai/sdk": { "optional": true },
+    "@google/generative-ai": { "optional": true },
+    "groq-sdk": { "optional": true }
+  },
+  "devDependencies": {
     "@anthropic-ai/sdk": "^0.100.0",
-    "@fluid/core": "workspace:*",
     "@google/generative-ai": "^0.24.1",
     "groq-sdk": "^1.2.1",
-    "zod": "^4.4.3"
+    "tsup": "^8.5.1",
+    "typescript": "^5"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
