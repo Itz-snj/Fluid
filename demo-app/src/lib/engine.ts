@@ -3,15 +3,15 @@ import {
   createEngine,
   createGroqProvider,
   type FluidEngine,
-} from "@fluid/engine";
-import { createContextEnricher, createRefreshPolicy } from "@fluid/telemetry";
+} from "@fluid-genui/engine";
+import { createContextEnricher, createRefreshPolicy } from "@fluid-genui/telemetry";
 import {
   createDbConnection,
   createPgProfileStore,
   createPgCacheAdapter,
   createPgUsageTracker,
   type FluidDb,
-} from "@fluid/db";
+} from "@fluid-genui/db";
 
 /**
  * Engine Singleton

@@ -1,7 +1,7 @@
 import { eq, and, desc, sql } from "drizzle-orm";
 import type { FluidDb } from "./connection";
 import { irSnapshots, userProfiles } from "./schema";
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 
 export type SnapshotSource = "generate" | "patch" | "revert" | "suggestion";
 

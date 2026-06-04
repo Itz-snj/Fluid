@@ -18,7 +18,7 @@ import {
   checkIRAgainstSchema,
   IRSemanticError,
   validateIR,
-} from "@fluid/core";
+} from "@fluid-genui/core";
 import type { LLMProvider } from "./llm";
 import { buildPatchPrompt, type PatchChatMessage } from "./patch-prompt";
 

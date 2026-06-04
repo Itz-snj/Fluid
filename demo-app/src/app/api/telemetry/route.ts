@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { UsageEvent } from "@fluid/engine";
+import type { UsageEvent } from "@fluid-genui/engine";
 import { getEngine } from "@/lib/engine";
 
 /**
@@ -7,7 +7,7 @@ import { getEngine } from "@/lib/engine";
  *
  * Record usage events for analytics and AI suggestions.
  *
- * Body: { events: UsageEvent[] } — exactly the payload the @fluid/react
+ * Body: { events: UsageEvent[] } — exactly the payload the @fluid-genui/react
  * `useFluidTelemetry` hook sends.
  */
 export async function POST(req: NextRequest) {

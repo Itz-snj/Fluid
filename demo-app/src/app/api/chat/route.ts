@@ -6,8 +6,8 @@ import {
   getMessages,
   createSnapshot,
   getActiveSnapshot,
-} from "@fluid/db";
-import type { FluidIR } from "@fluid/core";
+} from "@fluid-genui/db";
+import type { FluidIR } from "@fluid-genui/core";
 
 /**
  * POST /api/chat

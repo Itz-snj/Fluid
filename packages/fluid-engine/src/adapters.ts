@@ -1,4 +1,4 @@
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 
 /**
  * Backing-store interfaces.
@@ -168,7 +168,7 @@ export interface ContextSignals {
  *
  * Consumers implement this themselves so they can embed app-specific logic
  * (e.g. mapping internal role codes to natural-language descriptions).
- * A ready-to-use reference implementation ships in @fluid/telemetry.
+ * A ready-to-use reference implementation ships in @fluid-genui/telemetry.
  */
 export interface ContextEnricher {
   enrich(input: {
@@ -193,7 +193,7 @@ export interface RefreshDecision {
  * Decides whether a user's active IR is stale enough to warrant
  * background re-generation without an explicit user request.
  *
- * A reference implementation ships in @fluid/telemetry.
+ * A reference implementation ships in @fluid-genui/telemetry.
  */
 export interface RefreshPolicy {
   shouldRefresh(ctx: {

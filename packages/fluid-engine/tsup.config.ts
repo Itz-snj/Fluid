@@ -8,7 +8,7 @@ export default defineConfig({
   clean: true,
   target: "es2022",
   external: [
-    "@fluid/core",
+    "@fluid-genui/core",
     "@anthropic-ai/sdk",
     "@google/generative-ai",
     "groq-sdk",

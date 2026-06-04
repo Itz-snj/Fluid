@@ -1,5 +1,5 @@
 import { eq, and, isNull } from "drizzle-orm";
-import type { ProfileStore, IntentProfile } from "@fluid/engine";
+import type { ProfileStore, IntentProfile } from "@fluid-genui/engine";
 import type { FluidDb } from "./connection";
 import { userProfiles } from "./schema";
 

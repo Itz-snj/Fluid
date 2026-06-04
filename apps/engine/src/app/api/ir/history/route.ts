@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/engine";
-import { getSnapshotHistory } from "@fluid/db";
+import { getSnapshotHistory } from "@fluid-genui/db";
 
 /**
  * GET /api/ir/history — List IR version history for a user.

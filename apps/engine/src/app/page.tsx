@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { archetypes, getArchetype } from "@/archetypes";
 import { taskSchema } from "@/schemas/tasks.fluid";
-import { FluidView, type DataContext } from "@fluid/react";
+import { FluidView, type DataContext } from "@fluid-genui/react";
 import { IntentBox } from "@/components/IntentBox";
 
 interface PageProps {

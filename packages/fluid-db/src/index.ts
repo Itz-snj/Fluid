@@ -1,13 +1,13 @@
 /**
- * @fluid/db — PostgreSQL-backed adapter implementations for @fluid/engine.
+ * @fluid-genui/db — PostgreSQL-backed adapter implementations for @fluid-genui/engine.
  *
  * Usage:
- *   import { createDbConnection } from "@fluid/db";
- *   import { createPgProfileStore, createPgCacheAdapter, createPgUsageTracker } from "@fluid/db";
- *   import { enqueueRefreshJob, dequeueRefreshJobs, completeRefreshJob } from "@fluid/db";
- *   import { createSnapshot, getActiveSnapshot, revertToSnapshot } from "@fluid/db";
- *   import { appendMessage, getMessages } from "@fluid/db";
- *   import { insertSuggestion, getPendingSuggestions, resolveSuggestion } from "@fluid/db";
+ *   import { createDbConnection } from "@fluid-genui/db";
+ *   import { createPgProfileStore, createPgCacheAdapter, createPgUsageTracker } from "@fluid-genui/db";
+ *   import { enqueueRefreshJob, dequeueRefreshJobs, completeRefreshJob } from "@fluid-genui/db";
+ *   import { createSnapshot, getActiveSnapshot, revertToSnapshot } from "@fluid-genui/db";
+ *   import { appendMessage, getMessages } from "@fluid-genui/db";
+ *   import { insertSuggestion, getPendingSuggestions, resolveSuggestion } from "@fluid-genui/db";
  */
 
 export { createDbConnection } from "./connection";

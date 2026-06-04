@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/engine";
-import { revertToSnapshot, getSnapshot } from "@fluid/db";
+import { revertToSnapshot, getSnapshot } from "@fluid-genui/db";
 
 /**
  * POST /api/chat/revert

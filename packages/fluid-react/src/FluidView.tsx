@@ -6,7 +6,7 @@ import {
   type FluidSchema,
   checkIRAgainstSchema,
   validateIR,
-} from "@fluid/core";
+} from "@fluid-genui/core";
 import { type DataContext } from "./data";
 import { renderNode } from "./render";
 import { useFluidContext } from "./FluidProvider";

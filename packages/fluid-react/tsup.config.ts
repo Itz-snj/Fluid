@@ -7,5 +7,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   target: "es2022",
-  external: ["react", "react-dom", "react/jsx-runtime", "@fluid/core", "@fluid/engine", "zod"],
+  external: ["react", "react-dom", "react/jsx-runtime", "@fluid-genui/core", "@fluid-genui/engine", "zod"],
 });

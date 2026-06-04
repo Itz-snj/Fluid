@@ -4,7 +4,7 @@ import {
   checkIRAgainstSchema,
   IRSemanticError,
   validateIR,
-} from "@fluid/core";
+} from "@fluid-genui/core";
 import type { CacheAdapter } from "./adapters";
 import type { LLMProvider } from "./llm";
 import { buildSystemPrompt } from "./prompt";

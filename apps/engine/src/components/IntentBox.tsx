@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 import {
   FluidView,
   FluidChat,
   type DataContext,
   useFluidTelemetry,
   useMutations,
-} from "@fluid/react";
+} from "@fluid-genui/react";
 
 interface IntentBoxProps {
   data: DataContext;

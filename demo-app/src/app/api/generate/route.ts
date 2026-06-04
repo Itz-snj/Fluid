@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { intentKey } from "@fluid/engine";
+import { intentKey } from "@fluid-genui/engine";
 import { demoSchema } from "@/schemas/demo.fluid";
 import { getEngine, getDb } from "@/lib/engine";
-import { createSnapshot } from "@fluid/db";
+import { createSnapshot } from "@fluid-genui/db";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;

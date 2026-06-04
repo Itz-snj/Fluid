@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { UsageEvent } from "@fluid/engine";
+import type { UsageEvent } from "@fluid-genui/engine";
 import { useFluidContext } from "./FluidProvider";
 
 export interface UseFluidTelemetryOptions {

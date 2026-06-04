@@ -1,4 +1,4 @@
-// Public entry point for @fluid/engine.
+// Public entry point for @fluid-genui/engine.
 
 export { createEngine, buildExpandedIntent } from "./engine";
 export type {

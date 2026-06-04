@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 import {
   useFluidChat,
   type ChatMessage,

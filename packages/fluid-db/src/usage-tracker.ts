@@ -1,5 +1,5 @@
 import { eq, and, gte, sql, inArray } from "drizzle-orm";
-import type { UsageEvent, UsageSummary, UsageTracker } from "@fluid/engine";
+import type { UsageEvent, UsageSummary, UsageTracker } from "@fluid-genui/engine";
 import type { FluidDb } from "./connection";
 import { usageEvents, userProfiles } from "./schema";
 

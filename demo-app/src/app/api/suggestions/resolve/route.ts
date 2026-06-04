@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/engine";
-import { resolveSuggestion } from "@fluid/db";
+import { resolveSuggestion } from "@fluid-genui/db";
 
 /**
  * POST /api/suggestions/resolve

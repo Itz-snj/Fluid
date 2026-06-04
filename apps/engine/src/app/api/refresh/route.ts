@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getEngine, getDb } from "@/lib/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
-import { dequeueRefreshJobs, completeRefreshJob, insertSuggestion } from "@fluid/db";
-import type { IntentProfile, UsageSummary } from "@fluid/engine";
-import { generateSuggestions } from "@fluid/telemetry";
+import { dequeueRefreshJobs, completeRefreshJob, insertSuggestion } from "@fluid-genui/db";
+import type { IntentProfile, UsageSummary } from "@fluid-genui/engine";
+import { generateSuggestions } from "@fluid-genui/telemetry";
 
 export const runtime = "nodejs";
 // Allow up to 5 minutes for the refresh worker to complete its batch.

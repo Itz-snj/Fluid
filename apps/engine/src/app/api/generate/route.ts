@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { intentKey } from "@fluid/engine";
+import { intentKey } from "@fluid-genui/engine";
 import { taskSchema } from "@/schemas/tasks.fluid";
 import { getEngine, getDb } from "@/lib/engine";
-import { enqueueRefreshJob, createSnapshot } from "@fluid/db";
+import { enqueueRefreshJob, createSnapshot } from "@fluid-genui/db";
 
 export const runtime = "nodejs";
 

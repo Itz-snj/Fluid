@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 import {
   type FluidEndpoints,
   resolveEndpoints,

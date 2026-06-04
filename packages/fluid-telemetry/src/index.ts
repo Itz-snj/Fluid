@@ -1,5 +1,5 @@
 /**
- * @fluid/telemetry — Reference implementations for ContextEnricher and RefreshPolicy.
+ * @fluid-genui/telemetry — Reference implementations for ContextEnricher and RefreshPolicy.
  *
  * These are pure functions with no database dependency. Consumers can use
  * them as-is or write their own implementations of the same interfaces.

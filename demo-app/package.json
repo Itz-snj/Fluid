@@ -12,11 +12,11 @@
     "db:studio": "cd ../packages/fluid-db && drizzle-kit studio"
   },
   "dependencies": {
-    "@fluid/core": "workspace:*",
-    "@fluid/engine": "workspace:*",
-    "@fluid/react": "workspace:*",
-    "@fluid/db": "workspace:*",
-    "@fluid/telemetry": "workspace:*",
+    "@fluid-genui/core": "workspace:*",
+    "@fluid-genui/engine": "workspace:*",
+    "@fluid-genui/react": "workspace:*",
+    "@fluid-genui/db": "workspace:*",
+    "@fluid-genui/telemetry": "workspace:*",
     "next": "^15.1.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

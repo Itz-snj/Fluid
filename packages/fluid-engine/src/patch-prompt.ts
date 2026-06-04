@@ -6,8 +6,8 @@
  * The schema is included so the LLM knows the sandbox boundaries.
  */
 
-import type { FluidSchema } from "@fluid/core";
-import type { FluidIR } from "@fluid/core";
+import type { FluidSchema } from "@fluid-genui/core";
+import type { FluidIR } from "@fluid-genui/core";
 
 export interface PatchChatMessage {
   role: "user" | "assistant";

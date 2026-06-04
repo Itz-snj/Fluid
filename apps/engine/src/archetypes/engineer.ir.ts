@@ -1,4 +1,4 @@
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 
 export const engineerIR: FluidIR = {
   version: 1,

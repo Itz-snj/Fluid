@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/engine";
-import { getPendingSuggestions } from "@fluid/db";
+import { getPendingSuggestions } from "@fluid-genui/db";
 
 /**
  * GET /api/suggestions — Fetch pending suggestions for a user.

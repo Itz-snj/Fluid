@@ -12,7 +12,7 @@ import type {
   SplitNode,
   StackNode,
   StatNode,
-} from "@fluid/core";
+} from "@fluid-genui/core";
 import { type DataContext, groupRows, resolveBinding, runQuery } from "./data";
 
 /* ── Design tokens (inline — works in any app) ─────────────── */

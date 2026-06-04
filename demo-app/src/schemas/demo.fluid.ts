@@ -1,4 +1,4 @@
-import { defineSchema } from "@fluid/core";
+import { defineSchema } from "@fluid-genui/core";
 
 /**
  * Demo Schema - Task Management System

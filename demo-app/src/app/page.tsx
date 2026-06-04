@@ -1,6 +1,6 @@
 import { demoSchema } from "@/schemas/demo.fluid";
 import { Dashboard } from "@/components/Dashboard";
-import type { DataContext } from "@fluid/react";
+import type { DataContext } from "@fluid-genui/react";
 
 /**
  * Main Page (Server Component)

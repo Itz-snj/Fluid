@@ -3,15 +3,15 @@ import {
   createEngine,
   createGroqProvider,
   type FluidEngine,
-} from "@fluid/engine";
-import { createContextEnricher, createRefreshPolicy } from "@fluid/telemetry";
+} from "@fluid-genui/engine";
+import { createContextEnricher, createRefreshPolicy } from "@fluid-genui/telemetry";
 import {
   createDbConnection,
   createPgProfileStore,
   createPgCacheAdapter,
   createPgUsageTracker,
   type FluidDb,
-} from "@fluid/db";
+} from "@fluid-genui/db";
 
 /**
  * Single shared engine instance for this Next.js process.

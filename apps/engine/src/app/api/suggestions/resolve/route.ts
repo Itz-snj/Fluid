@@ -6,8 +6,8 @@ import {
   getActiveSnapshot,
   createSnapshot,
   appendMessage,
-} from "@fluid/db";
-import type { Suggestion } from "@fluid/db";
+} from "@fluid-genui/db";
+import type { Suggestion } from "@fluid-genui/db";
 
 /**
  * POST /api/suggestions/resolve — Accept or dismiss a suggestion.

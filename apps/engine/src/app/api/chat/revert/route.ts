@@ -3,7 +3,7 @@ import { getDb } from "@/lib/engine";
 import {
   revertToSnapshot,
   appendMessage,
-} from "@fluid/db";
+} from "@fluid-genui/db";
 
 /**
  * POST /api/chat/revert — Revert to a previous IR version.

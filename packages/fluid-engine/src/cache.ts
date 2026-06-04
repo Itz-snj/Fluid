@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 import type { CacheAdapter } from "./adapters";
 
 /**

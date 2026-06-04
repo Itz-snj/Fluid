@@ -1,4 +1,4 @@
-import type { RefreshDecision, RefreshPolicy, UsageSummary } from "@fluid/engine";
+import type { RefreshDecision, RefreshPolicy, UsageSummary } from "@fluid-genui/engine";
 
 export interface RefreshPolicyOptions {
   /** Refresh if the IR is older than this many days. Default 7. */

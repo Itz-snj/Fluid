@@ -9,8 +9,8 @@ import {
   useFluidTelemetry,
   useMutations,
   type DataContext,
-} from "@fluid/react";
-import type { FluidIR } from "@fluid/core";
+} from "@fluid-genui/react";
+import type { FluidIR } from "@fluid-genui/core";
 
 interface DashboardProps {
   data: DataContext;

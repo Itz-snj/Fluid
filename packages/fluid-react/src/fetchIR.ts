@@ -1,4 +1,4 @@
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 
 export interface FetchIRRequest {
   intent: string;
@@ -25,7 +25,7 @@ export interface FetchIRResponse {
   } | null;
   /**
    * Returned by the learn-loop path (engine.refine). `null` for stateless
-   * generate calls. Shape is `IntentProfile` from @fluid/engine.
+   * generate calls. Shape is `IntentProfile` from @fluid-genui/engine.
    */
   profile?: unknown;
   /** Server-issued snapshot ID, when the consumer's route persists snapshots. */

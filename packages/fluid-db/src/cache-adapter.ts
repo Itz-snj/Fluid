@@ -1,6 +1,6 @@
 import { eq, and, gt } from "drizzle-orm";
-import type { CacheAdapter } from "@fluid/engine";
-import type { FluidIR } from "@fluid/core";
+import type { CacheAdapter } from "@fluid-genui/engine";
+import type { FluidIR } from "@fluid-genui/core";
 import type { FluidDb } from "./connection";
 import { generatedIrs, userProfiles } from "./schema";
 

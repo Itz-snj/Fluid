@@ -6,13 +6,13 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, "../.."),
   },
-  // Ensure @fluid/* workspace packages are transpiled by Next.js.
+  // Ensure @fluid-genui/* workspace packages are transpiled by Next.js.
   transpilePackages: [
-    "@fluid/core",
-    "@fluid/engine",
-    "@fluid/react",
-    "@fluid/db",
-    "@fluid/telemetry",
+    "@fluid-genui/core",
+    "@fluid-genui/engine",
+    "@fluid-genui/react",
+    "@fluid-genui/db",
+    "@fluid-genui/telemetry",
   ],
 };
 

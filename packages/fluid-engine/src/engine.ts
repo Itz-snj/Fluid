@@ -1,4 +1,4 @@
-import type { FluidSchema, FluidIR } from "@fluid/core";
+import type { FluidSchema, FluidIR } from "@fluid-genui/core";
 import type {
   CacheAdapter,
   ContextEnricher,
@@ -56,7 +56,7 @@ export interface CreateEngineOptions {
   /**
    * Context enricher. Converts role, device, permissions, and other signals
    * into a natural-language paragraph appended to the expanded intent.
-   * A reference implementation ships in @fluid/telemetry.
+   * A reference implementation ships in @fluid-genui/telemetry.
    */
   contextEnricher?: ContextEnricher;
   /**
@@ -156,7 +156,7 @@ export interface FluidEngine {
 /**
  * The single entry point for consumers.
  *
- * Server-side use: import { createEngine } from "@fluid/engine" inside a Next
+ * Server-side use: import { createEngine } from "@fluid-genui/engine" inside a Next
  * route / server action. Pass your Anthropic key from process.env. Reuse the
  * returned engine across requests — its cache, rate limiter, profile store,
  * and usage tracker are all stateful.

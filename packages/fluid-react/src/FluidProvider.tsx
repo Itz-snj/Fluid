@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { FluidIR } from "@fluid/core";
+import type { FluidIR } from "@fluid-genui/core";
 
 export interface FluidEndpoints {
   /** POST — generate IR from intent. Default "/api/generate". */

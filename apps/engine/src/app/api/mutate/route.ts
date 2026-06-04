@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
 
   const { mutation, args } = parsed.data;
 
-  const def = (taskSchema.mutations as Record<string, import("@fluid/core").MutationDef> | undefined)?.[mutation];
+  const def = (taskSchema.mutations as Record<string, import("@fluid-genui/core").MutationDef> | undefined)?.[mutation];
   if (!def) {
     return NextResponse.json(
       { ok: false, error: `Unknown mutation "${mutation}"` },

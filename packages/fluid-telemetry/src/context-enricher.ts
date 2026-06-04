@@ -1,4 +1,4 @@
-import type { ContextEnricher, ContextSignals, IntentProfile, UsageSummary } from "@fluid/engine";
+import type { ContextEnricher, ContextSignals, IntentProfile, UsageSummary } from "@fluid-genui/engine";
 
 /**
  * Reference ContextEnricher implementation.
