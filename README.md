@@ -1,5 +1,9 @@
 # Fluid
 
+# Demo Link 
+https://youtu.be/rswuLSsfcIQ
+
+
 **Dynamic UI infrastructure — "GraphQL for frontend personalization."**
 
 Fluid generates personalized user interfaces from a single schema. Developers ship one `.fluid.ts` capability declaration; an LLM-driven engine reads it alongside user intent and produces a sandboxed JSON component tree (the **IR**). The renderer walks the IR and delivers a server-rendered React UI tailored to each user. No per-user component code. No manual customization.
